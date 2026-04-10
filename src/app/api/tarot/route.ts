@@ -1,6 +1,6 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-export const runtime = "edge";
+
 
 export async function POST(req: Request) {
   try {
@@ -17,13 +17,13 @@ export async function POST(req: Request) {
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
-    const systemPrompt = `你是一位塔罗大师。用户刚刚抽到了【${cardName}】。请用神秘、简洁的语气，为用户撰写一段大约 80 字的今日运势，并且给出建议。`;
+    const systemPrompt = `你是一位塔罗大师。用户刚刚抽到了【${cardName}】。请用神秘、简洁的语气，为用户撰写一段大约 100 字的今日运势，并且给出建议。`;
 
-    // ⚡ 关键改动 1：不再使用流式向 Google 索要数据，而是让它一口气全给出来，绝不断线！
+    // 不再使用流式向 Google 索要数据，而是让它一口气全给出来，绝不断线！
     const result = await model.generateContent(systemPrompt);
     const fullText = result.response.text();
 
-    // ⏳ 关键改动 2：在我们自己的服务器上做打字机效果，安全稳定
+    // 在我们自己的服务器上做打字机效果，安全稳定
     const stream = new ReadableStream({
       async start(controller) {
         for (const char of fullText) {

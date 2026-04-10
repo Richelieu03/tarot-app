@@ -76,7 +76,7 @@ export default function Home() {
     setCompletion("");
     setFlipped(true);
     
-    complete("", { body: { cardName: pickedCard } });
+    complete("请解牌", { body: { cardName: pickedCard } });
   };
 
   return (
@@ -135,7 +135,7 @@ export default function Home() {
         <div className="mt-12 w-full max-w-lg">
           <div className="rounded-2xl border border-white/5 bg-white/5 p-6 backdrop-blur-2xl shadow-xl">
              <div className="flex items-center justify-between text-[10px] tracking-widest text-zinc-500 mb-4">
-                <span>AI MASTER READING</span>
+                <span>TAROT MASTER READING</span>
                 <span className={isLoading ? "animate-pulse text-violet-400" : ""}>
                    {isLoading ? "正在通灵..." : flipped ? "神谕已降临" : "等待翻牌"}
                 </span>
