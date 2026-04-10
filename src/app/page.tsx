@@ -83,7 +83,7 @@ export default function Home() {
           神谕之门
         </h1>
         <p className="mt-4 text-sm text-zinc-400">
-          每日仅限一次，点击卡牌，抽取属于你的今日运势
+          点击卡牌，抽取属于你的今日运势
         </p>
 
         <div className="mt-14" style={{ perspective: 1200 }}>
