@@ -17,7 +17,7 @@ export async function POST(req: Request) {
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
-    const systemPrompt = `你是一位拥有20年经验的神秘塔罗大师。用户刚刚抽到了【${cardName}】。请用优美、神秘、带有哲学意味的语气，为用户撰写一段大约 80 字的专属解读。`;
+    const systemPrompt = `你是一位塔罗大师。用户刚刚抽到了【${cardName}】。请用神秘、简洁的语气，为用户撰写一段大约 80 字的今日运势，并且给出建议。`;
 
     // ⚡ 关键改动 1：不再使用流式向 Google 索要数据，而是让它一口气全给出来，绝不断线！
     const result = await model.generateContent(systemPrompt);

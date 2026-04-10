@@ -21,9 +21,14 @@ export default function Home() {
   const { completion, complete, error, isLoading, setCompletion } = useCompletion({
     api: "/api/tarot",
     streamProtocol: "text",
-    // 💾 关键改动 1：当 AI 打完字后，把完整的话偷偷存在浏览器里
+    // 🛡️ 关键修复 1：只有 AI 真正讲完话，没有报错时，才记录今天已抽牌
     onFinish: (_prompt, result) => {
-      localStorage.setItem("tarot_last_ai_reading", result);
+      // 如果结果太短或包含明显的错误字样，就不保存
+      if (result.length > 10 && !result.includes("Error") && !result.includes("limit")) {
+        const today = new Date().toLocaleDateString();
+        localStorage.setItem("tarot_last_ai_reading", result);
+        localStorage.setItem("tarot_last_draw_date", today);
+      }
     }
   });
 
@@ -33,19 +38,17 @@ export default function Home() {
     const today = new Date().toLocaleDateString();
     const lastDrawDate = localStorage.getItem("tarot_last_draw_date");
 
+    // 只有当“日期”确实被记录为今天，才进入锁定模式
     if (lastDrawDate === today) {
       const savedCard = localStorage.getItem("tarot_last_drawn_card") || "命运之轮";
-      // 💾 关键改动 2：从记忆里把 AI 的解牌词翻出来
       const savedReading = localStorage.getItem("tarot_last_ai_reading");
 
       setCurrentCard(savedCard);
       setFlipped(true); 
 
-      // 如果存了原文，就展示原文并加上温馨提示
       if (savedReading) {
         setCompletion(`【今日神谕回溯】\n\n${savedReading}\n\n(命运的指引每日只需一次，以上为你的今日专属解读，请明日再来探寻未知的轨迹。)`);
       } else {
-        // 万一没存上，就给个保底提示
         setCompletion(`【星象结界】\n命运的指引每日只需一次。你今日已经翻开了【${savedCard}】。\n过度窥探星辰会扰乱磁场，请明日再来吧。`);
       }
     }
@@ -57,16 +60,17 @@ export default function Home() {
 
     const today = new Date().toLocaleDateString();
     const lastDrawDate = localStorage.getItem("tarot_last_draw_date");
+    
+    // 如果今天已经成功记录过了，就不让抽
     if (lastDrawDate === today) return;
 
     const randomIndex = Math.floor(Math.random() * TAROT_DECK.length);
     const pickedCard = TAROT_DECK[randomIndex];
     setCurrentCard(pickedCard);
     
-    // 记下今天的日期和抽到的牌
-    localStorage.setItem("tarot_last_draw_date", today);
+    // 🛡️这里只记抽了哪张牌，绝对【不记】日期！
+    // 日期会在上面的 onFinish 里由 AI 确认后才记录
     localStorage.setItem("tarot_last_drawn_card", pickedCard);
-    // 抽新牌时，先清空旧的解牌记忆，以免错乱
     localStorage.removeItem("tarot_last_ai_reading");
     
     setCompletion("");
@@ -139,7 +143,10 @@ export default function Home() {
 
              <div className="min-h-[120px] text-left text-[15px] leading-8 text-zinc-200 font-serif italic whitespace-pre-wrap">
                {error ? (
-                 <span className="text-red-400">占卜中断：{error.message}</span>
+                 <div className="text-red-400/80 text-sm">
+                   <p>🔮 灵力场波动 (503/400): 算命师现在太忙了，两分钟后再来吧？</p>
+                   <p className="mt-2 text-[12px] opacity-60">提示：请刷新页面，再次点击卡牌尝试挤入星象频道。</p>
+                 </div>
                ) : completion ? (
                  completion
                ) : (
