@@ -1,0 +1,237 @@
+/**
+ * 塔罗牌阵：桌面扇形 vs 移动端横向 Scroll Snap + Cover Flow
+ * 牌格比例：与主牌一致 aspect-ratio 25 / 43（宽 250 : 高 430）
+ */
+
+/* ---------- 场景容器 ---------- */
+.tarot-fan-scene {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.tarot-fan-scene__inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: translateY(-120px);
+}
+
+/* 轨道：桌面 = 扇形容器；移动 = 横向滚动条 */
+.tarot-fan-track {
+  position: relative;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: clamp(320px, 42vh, 520px);
+  max-width: min(1100px, 100%);
+}
+
+/* 牌格：统一 25:43，脸面铺满（图片 object-cover + object-center 在 JSX） */
+.tarot-fan-cell {
+  box-sizing: border-box;
+  aspect-ratio: 25 / 43;
+}
+
+.tarot-fan-face {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.tarot-fan-face img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  display: block;
+}
+
+/* ---------- 桌面：扇形平铺（>768px） ---------- */
+@media (min-width: 769px) {
+  .tarot-fan-track {
+    pointer-events: none;
+  }
+
+  .tarot-fan-cell {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 100px;
+    height: auto;
+    margin-left: -50px;
+    margin-top: calc(-50px * 43 / 25);
+    pointer-events: auto;
+    cursor: pointer;
+    list-style: none;
+
+    --off: calc(var(--i) - 10);
+    --fan-x: calc(var(--off) * 32px);
+    --fan-y: calc(pow(abs(var(--off)), 2) * 0.5px);
+    --fan-r: calc(var(--off) * 2.5deg);
+
+    transform: translate(var(--fan-x), var(--fan-y)) rotate(var(--fan-r));
+    transform-origin: 50% 100%;
+    will-change: transform, opacity, box-shadow;
+    transition:
+      transform 0.55s cubic-bezier(0.22, 1, 0.36, 1),
+      box-shadow 0.55s cubic-bezier(0.22, 1, 0.36, 1),
+      opacity 0.45s ease;
+
+    opacity: 0;
+    animation: tarot-fan-enter 0.55s ease forwards;
+    animation-delay: calc(var(--i) * 20ms);
+  }
+
+  .tarot-fan-cell:hover {
+    transform: translate(var(--fan-x), calc(var(--fan-y) - 30px)) rotate(var(--fan-r))
+      scale(1.12);
+    z-index: 100;
+    box-shadow: 0 10px 40px 5px rgba(167, 139, 250, 0.4);
+  }
+
+  .tarot-fan-face {
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55);
+    transform: none;
+    opacity: 1;
+    transition: none;
+  }
+}
+
+@keyframes tarot-fan-enter {
+  from {
+    opacity: 0;
+    transform: translate(var(--fan-x), calc(var(--fan-y) + 100px)) rotate(var(--fan-r));
+  }
+  to {
+    opacity: 1;
+    transform: translate(var(--fan-x), var(--fan-y)) rotate(var(--fan-r));
+  }
+}
+
+/* ---------- 移动端：横向画廊 + scroll-snap（<=768px） ---------- */
+@media (max-width: 768px) {
+  .tarot-fan-scene {
+    align-items: flex-end;
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+
+  .tarot-fan-scene__inner {
+    /* 整体上移，远离底部文字区 */
+    transform: translateY(-110px);
+    height: auto;
+    min-height: 0;
+    pointer-events: auto;
+  }
+
+  .tarot-fan-track {
+    --tarot-strip-card-w: min(70vw, 280px);
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 1rem;
+    width: 100%;
+    height: auto;
+    min-height: calc(var(--tarot-strip-card-w) * 43 / 25 + 2.5rem);
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-snap-type: x mandatory;
+    scroll-behavior: smooth;
+    touch-action: pan-x;
+    scroll-padding-inline: calc(50vw - var(--tarot-strip-card-w) / 2);
+    padding-inline: calc(50vw - var(--tarot-strip-card-w) / 2);
+    padding-block: 0.75rem;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    pointer-events: auto;
+
+    mask-image: linear-gradient(
+      to right,
+      transparent 0%,
+      #000 10%,
+      #000 90%,
+      transparent 100%
+    );
+    -webkit-mask-image: linear-gradient(
+      to right,
+      transparent 0%,
+      #000 10%,
+      #000 90%,
+      transparent 100%
+    );
+  }
+
+  .tarot-fan-cell {
+    position: relative;
+    left: auto;
+    top: auto;
+    flex: 0 0 var(--tarot-strip-card-w);
+    width: var(--tarot-strip-card-w);
+    height: auto;
+    margin: 0;
+    scroll-snap-align: center;
+    scroll-snap-stop: always;
+    cursor: pointer;
+    list-style: none;
+    transform: none !important;
+    animation: none;
+    opacity: 1;
+    transition: none;
+    will-change: auto;
+  }
+
+  .tarot-fan-cell:hover {
+    transform: none !important;
+    box-shadow: none;
+  }
+
+  /* 侧卡视觉：在正确比例上缩放，避免“压扁” */
+  .tarot-fan-face {
+    border-radius: 4px;
+    transform: scale(0.8);
+    opacity: 0.5;
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+    transition:
+      transform 0.35s ease,
+      opacity 0.35s ease,
+      box-shadow 0.35s ease;
+  }
+
+  @supports (animation-timeline: view()) {
+    .tarot-fan-face {
+      animation: tarot-coverflow-face linear both;
+      animation-timeline: view(inline);
+      animation-range: entry 0% exit 100%;
+    }
+  }
+}
+
+@keyframes tarot-coverflow-face {
+  0%,
+  100% {
+    transform: scale(0.8);
+    opacity: 0.5;
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+  }
+  45%,
+  55% {
+    transform: scale(1);
+    opacity: 1;
+    box-shadow:
+      0 0 0 1px rgba(250, 204, 21, 0.35),
+      0 0 36px rgba(250, 204, 21, 0.55),
+      0 0 100px rgba(234, 179, 8, 0.2),
+      0 18px 40px rgba(0, 0, 0, 0.55);
+  }
+}
