@@ -226,44 +226,40 @@ export default function Home() {
           className={`relative z-20 w-full max-w-lg -translate-y-[10px] max-md:translate-y-0 ${isSelecting ? "max-md:mt-16" : "max-md:mt-6"}`}
         >
           <div className="rounded-none border border-white/5 bg-white/5 p-6 shadow-xl backdrop-blur-2xl transition-opacity duration-700">
-            <div className="mb-4 flex items-center justify-between text-[10px] tracking-widest text-zinc-500">
-              <span>{t(locale, "readingHeader")}</span>
-              <span
-                className={isLoading ? "animate-pulse text-violet-400" : ""}
-              >
-                {isLoading
-                  ? t(locale, "readingLoading")
-                  : flipped
-                    ? t(locale, "readingDone")
-                    : t(locale, "readingWait")}
-              </span>
-            </div>
+          <div className="mb-4 flex items-center justify-between text-[10px] tracking-widest text-zinc-500">
+            <span>{t(locale, "readingHeader")}</span>
+            {/* 💡 给这个 span 绑定 flipped 状态作为 key */}
+            <span 
+              key={flipped ? "flipped-status" : "initial-status"} 
+              className={isLoading ? "animate-pulse text-violet-400" : ""}
+            >
+              {isLoading ? t(locale, "readingLoading") : (!flipped ? t(locale, "readingWait") : null)}
+            </span>
+          </div>
 
             <div className="min-h-[120px] whitespace-pre-wrap text-left font-serif text-[15px] italic leading-8 text-zinc-200">
-              {error ||
-              (isEnergyRecoveryBlock(completion) && !isLoading) ? (
+              {error || (isEnergyRecoveryBlock(completion) && !isLoading) ? (
                 <div className="flex flex-col items-start text-sm text-red-400/80">
-                  <p>
-                    🔮 {t(locale, "energyErrorKeyword")}:{" "}
-                    {t(locale, "errorBusy")}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={retryReading}
-                    className="mt-4 border border-violet-500/50 px-5 py-2 text-xs tracking-wider text-violet-400 transition-colors hover:bg-violet-500/20"
-                  >
+                  <p>🔮 {t(locale, "energyErrorKeyword")}: {t(locale, "errorBusy")}</p>
+                  <button type="button" onClick={retryReading} className="mt-4 border border-violet-500/50 px-5 py-2 text-xs text-violet-400">
                     {t(locale, "retryButton")}
                   </button>
                 </div>
               ) : completion ? (
+                /* 1. 只要 AI 开始说话了，显示 AI 的话 */
                 completion
+              ) : isLoading ? (
+                /* 2. 💡 关键：只要在 Channeling (isLoading)，文字框中间必须是空的！ */
+                null
               ) : (
+                /* 3. 只有在既没说话也没加载时，才显示那些占位提示 */
                 <span className="text-zinc-600">
-                  {flipped
-                    ? t(locale, "placeholderThinking")
-                    : isSelecting
-                      ? t(locale, "placeholderSelecting")
-                      : t(locale, "placeholderAfterPick")}
+                  {isSelecting
+                    ? t(locale, "placeholderSelecting") // 选牌中
+                    : !flipped 
+                      ? t(locale, "placeholderAfterPick") // 已选牌，待翻牌
+                      : null // 💡 翻牌瞬间，这里直接归零，确保不跟 Channeling 抢位置
+                  }
                 </span>
               )}
             </div>
@@ -273,33 +269,51 @@ export default function Home() {
 
       <div className="tarot-fan-scene">
         <div className="tarot-fan-scene__inner">
-          <AnimatePresence mode="sync">
-            {isSelecting && appLoaded ? (
-              <ul className="tarot-fan-track" key="tarot-fan-track">
-                {Array.from({ length: 22 }).map((_, i) => (
-                  <motion.li
-                    key={`fan-card-${i}`}
-                    layoutId={`fan-card-${i}`}
-                    layout={false}
-                    initial={false}
-                    exit={{ opacity: 0, transition: { duration: 0.38 } }}
-                    className="tarot-fan-cell"
-                    style={{ "--i": i } as CSSProperties}
-                    onClick={() => handleSelectFromFan(i)}
+          {/* 这里直接用逻辑判断，去掉了 AnimatePresence */}
+          {isSelecting && appLoaded && (
+            <ul className="tarot-fan-track" key="tarot-fan-track">
+              {Array.from({ length: 22 }).map((_, i) => (
+                <motion.li
+                  key={`fan-card-${i}`}
+                  layoutId={`fan-card-${i}`}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="tarot-fan-cell cursor-pointer"
+                  style={{ 
+                    "--i": i,
+                    // 核心逻辑：点击后瞬间隐藏其他所有牌
+                    visibility: clickedIndex !== null && clickedIndex !== i ? 'hidden' : 'visible'
+                  } as CSSProperties}
+                  onClick={() => handleSelectFromFan(i)}
+                >
+                  <motion.div
+                    className="h-full w-full"
+                    initial={{ y: 0 }}
+                    whileHover={{ 
+                      y: -40,
+                      scale: 1.1,
+                      zIndex: 50
+                    }}
+                    transition={{ 
+                      type: "spring", 
+                      stiffness: 250, 
+                      damping: 18 
+                    }}
                   >
-                    <div className="tarot-fan-face relative h-full w-full overflow-hidden rounded-none">
+                    <div className="tarot-fan-face relative h-full w-full overflow-hidden rounded-none shadow-xl">
                       <img
                         src="/tarot/维特牌背.jpg"
                         className="h-full w-full rounded-none object-cover object-center"
                         alt={t(locale, "ariaFanCard")}
                         draggable={false}
                       />
+                      <div className="absolute inset-0 bg-violet-500/10 opacity-0 hover:opacity-100 transition-opacity" />
                     </div>
-                  </motion.li>
-                ))}
-              </ul>
-            ) : null}
-          </AnimatePresence>
+                  </motion.div>
+                </motion.li>
+              ))}
+            </ul>
+          )}
         </div>
       </div>
     </div>
