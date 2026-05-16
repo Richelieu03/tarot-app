@@ -206,7 +206,7 @@ export default function Home() {
                 </p>
               </div>
 
-              <div className="w-full space-y-8">
+              <div className="w-full space-y-14 md:space-y-8">
                 <label className="sr-only" htmlFor="oracle-question">
                   {t(locale, "questionPlaceholder")}
                 </label>
@@ -216,7 +216,7 @@ export default function Home() {
                   value={userQuestion}
                   onChange={(e) => setUserQuestion(e.target.value)}
                   placeholder={t(locale, "questionPlaceholder")}
-                  className="w-full resize-none rounded-t-lg border-b border-transparent bg-white/[0.04] px-0 py-3 text-left text-lg leading-relaxed text-zinc-100 shadow-[0_1px_0_0_rgba(167,139,250,0.35)] backdrop-blur-md transition-[box-shadow,background-color] duration-500 placeholder:text-zinc-600 focus:border-0 focus:bg-white/[0.06] focus:outline-none focus:ring-0 focus:shadow-[0_2px_24px_rgba(167,139,250,0.25),0_1px_0_0_rgba(250,204,21,0.35)] sm:text-xl"
+                  className="w-full resize-none rounded-t-lg border-b border-transparent bg-white/[0.04] px-0 py-3 text-left text-base leading-relaxed text-zinc-100 shadow-[0_1px_0_0_rgba(167,139,250,0.35)] backdrop-blur-md transition-[box-shadow,background-color] duration-500 placeholder:text-zinc-600 focus:border-0 focus:bg-white/[0.06] focus:outline-none focus:ring-0 focus:shadow-[0_2px_24px_rgba(167,139,250,0.25),0_1px_0_0_rgba(250,204,21,0.35)] md:text-lg"
                   autoComplete="off"
                 />
 
@@ -282,13 +282,16 @@ export default function Home() {
                           }}
                         />
                         <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent" />
-                        <div className="relative z-10 mt-auto w-full px-6 pb-8 text-center">
-                          <div className="text-[10px] tracking-[0.3em] text-violet-400 drop-shadow-md">
+                        <div className="relative z-10 mt-auto w-full px-2 pb-3 md:px-6 md:pb-8 text-center leading-tight">
+                          <div className="text-[7px] md:text-[10px] tracking-widest md:tracking-[0.3em] text-violet-400 drop-shadow-md">
                             {t(locale, "oracleBadge")}
                           </div>
-                          <div className="mt-2 text-2xl font-bold text-white drop-shadow-xl">
-                            {cardLabel}{" "}
-                            <span className="ml-1 text-lg font-normal text-zinc-300">
+                          
+                          {/* 移除了 md:block，现在无论手机还是电脑，都会老老实实上下分行 */}
+                          <div className="mt-1 md:mt-2 text-[13px] md:text-2xl font-bold text-white drop-shadow-xl flex flex-col items-center justify-center gap-0.5 md:gap-1">
+                            <span>{cardLabel}</span>
+                            {/* 电脑端的正逆位字号我稍微调小了一点点(md:text-base)，因为分行后字太大容易喧宾夺主 */}
+                            <span className="text-[10px] md:text-base font-normal text-zinc-300">
                               ({orientationLabel})
                             </span>
                           </div>
