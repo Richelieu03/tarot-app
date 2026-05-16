@@ -30,6 +30,11 @@ const ui = {
     readPrompt: "Reading",
     ariaTarotBack: "Tarot card back",
     ariaFanCard: "Tarot card in spread",
+    ritualSubtitle:
+      "Quiet your mind. Speak what seeks an answer—then step into the spread.",
+    questionPlaceholder:
+      "Hold your question in silence, then write it here…",
+    enterSpread: "Enter the Spread",
   },
   zh: {
     title: "神谕之门",
@@ -58,6 +63,9 @@ const ui = {
     readPrompt: "请解牌",
     ariaTarotBack: "塔罗牌背",
     ariaFanCard: "牌阵中的塔罗牌",
+    ritualSubtitle: "静心凝神，将想问之事诉诸笔墨，再步入牌阵。",
+    questionPlaceholder: "在心中默念并输入你的问题…",
+    enterSpread: "进入牌阵",
   },
 } as const;
 

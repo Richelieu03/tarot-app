@@ -14,8 +14,14 @@ import {
   t,
 } from "../lib/ui-i18n";
 
+type AppStage = "asking" | "selecting" | "reading";
+
+const LS_USER_QUESTION = "tarot_user_question";
+
 export default function Home() {
   const [locale, setLocale] = useState<Locale>(defaultLocale);
+  const [appStage, setAppStage] = useState<AppStage>("asking");
+  const [userQuestion, setUserQuestion] = useState("");
   const [appLoaded, setAppLoaded] = useState(false);
   const [isSelecting, setIsSelecting] = useState(true);
   const [clickedIndex, setClickedIndex] = useState<number | null>(null);
@@ -62,10 +68,14 @@ export default function Home() {
           localStorage.getItem("tarot_last_drawn_card") || "命运之轮";
         const savedReversed =
           localStorage.getItem("tarot_last_card_reversed") === "true";
+        const savedQ = localStorage.getItem(LS_USER_QUESTION) ?? "";
+
         setIsReversed(savedReversed);
         setCurrentCard(savedCard);
         setFlipped(true);
         setIsSelecting(false);
+        setAppStage("reading");
+        setUserQuestion(savedQ);
 
         const savedReading = localStorage.getItem("tarot_last_ai_reading");
         if (savedReading) {
@@ -80,6 +90,12 @@ export default function Home() {
     }, 0);
     return () => window.clearTimeout(id);
   }, [setCompletion]);
+
+  const enterSpread = () => {
+    const q = userQuestion.trim();
+    localStorage.setItem(LS_USER_QUESTION, q);
+    setAppStage("selecting");
+  };
 
   const handleSelectFromFan = (index: number) => {
     if (!isSelecting) return;
@@ -101,18 +117,26 @@ export default function Home() {
     setCompletion("");
   };
 
+  const apiBody = () => ({
+    cardName: currentCard,
+    isReversed,
+    locale,
+    question: userQuestion.trim(),
+  });
+
   const handleMainCardClick = () => {
     if (flipped || isSelecting) return;
+    setAppStage("reading");
     setFlipped(true);
     void complete(t(locale, "readPrompt"), {
-      body: { cardName: currentCard, isReversed, locale },
+      body: apiBody(),
     });
   };
 
   const retryReading = () => {
     setCompletion("");
     void complete(t(locale, "readPrompt"), {
-      body: { cardName: currentCard, isReversed, locale },
+      body: apiBody(),
     });
   };
 
@@ -121,9 +145,21 @@ export default function Home() {
     ? t(locale, "reversed")
     : t(locale, "upright");
 
+  const subtitleMain = isSelecting
+    ? t(locale, "subtitleSelecting")
+    : t(locale, "subtitleAfterSelect");
+
+  const readingStatusLabel = isLoading
+    ? t(locale, "readingLoading")
+    : flipped && completion && !isEnergyRecoveryBlock(completion)
+      ? t(locale, "readingDone")
+      : t(locale, "readingWait");
+
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#05030a] font-sans text-zinc-50">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(900px_520px_at_50%_25%,rgba(140,70,255,0.25),transparent_60%)]" />
+    <div className={`relative flex flex-col overflow-x-hidden bg-[#05030a] font-sans text-zinc-50 ${appStage === "reading" ? "min-h-screen overflow-y-auto" : "h-screen overflow-hidden w-full fixed inset-0"}`}>
+      <div
+        className={`pointer-events-none absolute inset-0 bg-[radial-gradient(900px_520px_at_50%_25%,rgba(140,70,255,0.25),transparent_60%)] transition-opacity duration-700 ${appStage === "asking" ? "opacity-40" : "opacity-100"}`}
+      />
 
       <div className="fixed right-4 top-4 z-[100] flex gap-1 rounded-full border border-white/15 bg-black/45 p-1 backdrop-blur-md">
         <button
@@ -150,172 +186,226 @@ export default function Home() {
         </button>
       </div>
 
-      <main
-        className={`relative z-10 flex w-full max-w-3xl flex-col items-center px-6 py-12 text-center ${isSelecting ? "max-md:pb-[220px]" : ""}`}
-      >
-        <h1 className="text-2xl font-semibold tracking-tight text-zinc-100 sm:text-4xl">
-          {t(locale, "title")}
-        </h1>
-        <p className="mt-4 text-sm text-zinc-400">
-          {isSelecting
-            ? t(locale, "subtitleSelecting")
-            : t(locale, "subtitleAfterSelect")}
-        </p>
+      <main className="relative z-10 flex w-full max-w-3xl flex-col items-center px-6 pt-6 pb-12 md:py-12 text-center mt-4 mb-auto md:my-auto mx-auto">
+          <AnimatePresence mode="wait">
+          {appStage === "asking" && appLoaded ? (
+            <motion.div
+              key="ritual-asking"
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -12 }}
+              transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+              className="flex min-h-[70vh] w-full max-w-lg flex-col items-center justify-center gap-10"
+            >
+              <div className="space-y-3">
+                <h1 className="text-3xl font-light tracking-[0.2em] text-zinc-100 sm:text-4xl">
+                  {t(locale, "title")}
+                </h1>
+                <p className="text-sm leading-relaxed text-zinc-500">
+                  {t(locale, "ritualSubtitle")}
+                </p>
+              </div>
 
-        <div
-          className="w-[250px] -translate-y-[20px] max-md:w-[140px] max-md:-translate-y-[20px] max-md:mb-2 aspect-[25/43] [perspective:1200px]"
-          >
-          <AnimatePresence>
-            {!isSelecting && appLoaded && (
-              <motion.div
-                layoutId={
-                  clickedIndex !== null
-                    ? `fan-card-${clickedIndex}`
-                    : "tarot-main-card"
-                }
-                onClick={handleMainCardClick}
-                className={`relative h-full w-full rounded-none [transform-style:preserve-3d] ${!flipped && !isSelecting ? "cursor-pointer transition-shadow hover:shadow-[0_0_30px_rgba(167,139,250,0.3)]" : ""}`}
-                animate={{ rotateY: flipped ? 180 : 0 }}
-                transition={{
-                  layout: { type: "spring", stiffness: 200, damping: 25 },
-                  duration: 0.8,
-                }}
-              >
-                <div
-                  className="absolute inset-0 flex items-center justify-center overflow-hidden rounded-none border border-white/10 bg-[#0a0612] shadow-2xl [backface-visibility:hidden] [transform:translateZ(0)]"
-                >
-                  <img
-                    src="/tarot/维特牌背.jpg"
-                    alt={t(locale, "ariaTarotBack")}
-                    className="absolute inset-0 h-full w-full object-cover object-center"
-                  />
-                  <div className="absolute inset-0 bg-black/30" />
-                </div>
+              <div className="w-full space-y-8">
+                <label className="sr-only" htmlFor="oracle-question">
+                  {t(locale, "questionPlaceholder")}
+                </label>
+                <textarea
+                  id="oracle-question"
+                  rows={4}
+                  value={userQuestion}
+                  onChange={(e) => setUserQuestion(e.target.value)}
+                  placeholder={t(locale, "questionPlaceholder")}
+                  className="w-full resize-none rounded-t-lg border-b border-transparent bg-white/[0.04] px-0 py-3 text-left text-lg leading-relaxed text-zinc-100 shadow-[0_1px_0_0_rgba(167,139,250,0.35)] backdrop-blur-md transition-[box-shadow,background-color] duration-500 placeholder:text-zinc-600 focus:border-0 focus:bg-white/[0.06] focus:outline-none focus:ring-0 focus:shadow-[0_2px_24px_rgba(167,139,250,0.25),0_1px_0_0_rgba(250,204,21,0.35)] sm:text-xl"
+                  autoComplete="off"
+                />
 
-                <div
-                  className="absolute inset-0 flex flex-col items-center justify-center overflow-hidden rounded-none border border-white/20 bg-black shadow-2xl [backface-visibility:hidden] [transform:rotateY(180deg)_translateZ(0.1px)]"
+                <button
+                  type="button"
+                  onClick={enterSpread}
+                  className="group relative w-full overflow-hidden rounded-full border border-amber-400/25 bg-gradient-to-b from-violet-950/80 to-black px-8 py-4 text-sm font-medium tracking-[0.35em] text-amber-100/95 shadow-[0_0_40px_-12px_rgba(250,204,21,0.45)] transition-[transform,box-shadow,border-color] duration-500 hover:border-amber-300/50 hover:shadow-[0_0_56px_-8px_rgba(250,204,21,0.55)] active:scale-[0.98]"
                 >
-                  <img
-                    src={`/tarot/${currentCard}.jpg`}
-                    alt={cardLabel}
-                    className={`absolute inset-0 h-full w-full object-cover object-center opacity-90 ${isReversed ? "rotate-180" : ""}`}
-                    onError={(e) => {
-                      e.currentTarget.src =
-                        "https://images.unsplash.com/photo-1620052579624-b153545faed8?q=80&w=400&auto=format&fit=crop";
-                    }}
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent" />
-                  <div className="relative z-10 mt-auto w-full px-6 pb-8 text-center">
-                    <div className="text-[10px] tracking-[0.3em] text-violet-400 drop-shadow-md">
-                      {t(locale, "oracleBadge")}
-                    </div>
-                    <div className="mt-2 text-2xl font-bold text-white drop-shadow-xl">
-                      {cardLabel}{" "}
-                      <span className="ml-1 text-lg font-normal text-zinc-300">
-                        ({orientationLabel})
+                  <span className="relative z-10">
+                    {t(locale, "enterSpread")}
+                  </span>
+                  <span className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_0%,rgba(250,204,21,0.12),transparent_55%)] opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
+                </button>
+              </div>
+            </motion.div>
+          ) : (
+            <motion.div
+              key="spread-flow"
+              initial={{ opacity: 0, y: 14 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+              className="flex w-full flex-col items-center"
+            >
+              <h1 className="text-2xl font-semibold tracking-tight text-zinc-100 sm:text-4xl">
+                {t(locale, "title")}
+              </h1>
+              <p className="mt-4 text-sm text-zinc-400">{subtitleMain}</p>
+
+              <div className="w-[250px] max-md:w-[140px] aspect-[25/43] my-6 md:-translate-y-[10px] flex items-center justify-center [perspective:1200px]">
+                <AnimatePresence>
+                  {!isSelecting && appLoaded && (
+                    <motion.div
+                      layoutId={
+                        clickedIndex !== null
+                          ? `fan-card-${clickedIndex}`
+                          : "tarot-main-card"
+                      }
+                      onClick={handleMainCardClick}
+                      className={`relative h-full w-full rounded-none [transform-style:preserve-3d] ${!flipped && !isSelecting ? "cursor-pointer transition-shadow hover:shadow-[0_0_30px_rgba(167,139,250,0.3)]" : ""}`}
+                      animate={{ rotateY: flipped ? 180 : 0 }}
+                      transition={{
+                        layout: { type: "spring", stiffness: 200, damping: 25 },
+                        duration: 0.8,
+                      }}
+                    >
+                      <div className="absolute inset-0 flex items-center justify-center overflow-hidden rounded-none border border-white/10 bg-[#0a0612] shadow-2xl [backface-visibility:hidden] [transform:translateZ(0)]">
+                        <img
+                          src="/tarot/维特牌背.jpg"
+                          alt={t(locale, "ariaTarotBack")}
+                          className="absolute inset-0 h-full w-full object-cover object-center"
+                        />
+                        <div className="absolute inset-0 bg-black/30" />
+                      </div>
+
+                      <div className="absolute inset-0 flex flex-col items-center justify-center overflow-hidden rounded-none border border-white/20 bg-black shadow-2xl [backface-visibility:hidden] [transform:rotateY(180deg)_translateZ(0.1px)]">
+                        <img
+                          src={`/tarot/${currentCard}.jpg`}
+                          alt={cardLabel}
+                          className={`absolute inset-0 h-full w-full object-cover object-center opacity-90 ${isReversed ? "rotate-180" : ""}`}
+                          onError={(e) => {
+                            e.currentTarget.src =
+                              "https://images.unsplash.com/photo-1620052579624-b153545faed8?q=80&w=400&auto=format&fit=crop";
+                          }}
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent" />
+                        <div className="relative z-10 mt-auto w-full px-6 pb-8 text-center">
+                          <div className="text-[10px] tracking-[0.3em] text-violet-400 drop-shadow-md">
+                            {t(locale, "oracleBadge")}
+                          </div>
+                          <div className="mt-2 text-2xl font-bold text-white drop-shadow-xl">
+                            {cardLabel}{" "}
+                            <span className="ml-1 text-lg font-normal text-zinc-300">
+                              ({orientationLabel})
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+
+              <div className="relative z-20 mt-4 md:mt-0 md:-translate-y-[20px] w-full max-w-lg md:max-w-2xl">
+                <div className="rounded-none border border-white/5 bg-white/5 p-6 shadow-xl backdrop-blur-2xl transition-opacity duration-700">
+                  <div className="mb-4 flex items-center justify-between text-[10px] tracking-widest text-zinc-500">
+                    <span>{t(locale, "readingHeader")}</span>
+                    <span
+                      className={
+                        isLoading ? "animate-pulse text-violet-400" : ""
+                      }
+                    >
+                      {readingStatusLabel}
+                    </span>
+                  </div>
+
+                  <div className="min-h-[120px] whitespace-pre-wrap text-left font-serif text-[15px] italic leading-8 text-zinc-200">
+                    {error ||
+                    (isEnergyRecoveryBlock(completion) && !isLoading) ? (
+                      <div className="flex flex-col items-start text-sm text-red-400/80">
+                        <p>
+                          🔮 {t(locale, "energyErrorKeyword")}:{" "}
+                          {t(locale, "errorBusy")}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={retryReading}
+                          className="mt-4 border border-violet-500/50 px-5 py-2 text-xs text-violet-400"
+                        >
+                          {t(locale, "retryButton")}
+                        </button>
+                      </div>
+                    ) : completion ? (
+                      completion
+                    ) : isLoading ? null : (
+                      <span className="text-zinc-600">
+                        {isSelecting
+                          ? t(locale, "placeholderSelecting")
+                          : !flipped
+                            ? t(locale, "placeholderAfterPick")
+                            : t(locale, "placeholderThinking")}
                       </span>
-                    </div>
+                    )}
                   </div>
                 </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-
-        <div
-          className={`relative z-20 w-full max-w-lg -translate-y-[10px] max-md:translate-y-0 ${isSelecting ? "max-md:mt-16" : "max-md:mt-6"}`}
-        >
-          <div className="rounded-none border border-white/5 bg-white/5 p-6 shadow-xl backdrop-blur-2xl transition-opacity duration-700">
-          <div className="mb-4 flex items-center justify-between text-[10px] tracking-widest text-zinc-500">
-            <span>{t(locale, "readingHeader")}</span>
-            {/* 💡 给这个 span 绑定 flipped 状态作为 key */}
-            <span 
-              key={flipped ? "flipped-status" : "initial-status"} 
-              className={isLoading ? "animate-pulse text-violet-400" : ""}
-            >
-              {isLoading ? t(locale, "readingLoading") : (!flipped ? t(locale, "readingWait") : null)}
-            </span>
-          </div>
-
-            <div className="min-h-[120px] whitespace-pre-wrap text-left font-serif text-[15px] italic leading-8 text-zinc-200">
-              {error || (isEnergyRecoveryBlock(completion) && !isLoading) ? (
-                <div className="flex flex-col items-start text-sm text-red-400/80">
-                  <p>🔮 {t(locale, "energyErrorKeyword")}: {t(locale, "errorBusy")}</p>
-                  <button type="button" onClick={retryReading} className="mt-4 border border-violet-500/50 px-5 py-2 text-xs text-violet-400">
-                    {t(locale, "retryButton")}
-                  </button>
-                </div>
-              ) : completion ? (
-                /* 1. 只要 AI 开始说话了，显示 AI 的话 */
-                completion
-              ) : isLoading ? (
-                /* 2. 💡 关键：只要在 Channeling (isLoading)，文字框中间必须是空的！ */
-                null
-              ) : (
-                /* 3. 只有在既没说话也没加载时，才显示那些占位提示 */
-                <span className="text-zinc-600">
-                  {isSelecting
-                    ? t(locale, "placeholderSelecting") // 选牌中
-                    : !flipped 
-                      ? t(locale, "placeholderAfterPick") // 已选牌，待翻牌
-                      : null // 💡 翻牌瞬间，这里直接归零，确保不跟 Channeling 抢位置
-                  }
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </main>
 
-      <div className="tarot-fan-scene">
-        <div className="tarot-fan-scene__inner">
-          {/* 这里直接用逻辑判断，去掉了 AnimatePresence */}
-          {isSelecting && appLoaded && (
-            <ul className="tarot-fan-track" key="tarot-fan-track">
-              {Array.from({ length: 22 }).map((_, i) => (
-                <motion.li
-                  key={`fan-card-${i}`}
-                  layoutId={`fan-card-${i}`}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="tarot-fan-cell cursor-pointer"
-                  style={{ 
-                    "--i": i,
-                    // 核心逻辑：点击后瞬间隐藏其他所有牌
-                    visibility: clickedIndex !== null && clickedIndex !== i ? 'hidden' : 'visible'
-                  } as CSSProperties}
-                  onClick={() => handleSelectFromFan(i)}
-                >
-                  <motion.div
-                    className="h-full w-full"
-                    initial={{ y: 0 }}
-                    whileHover={{ 
-                      y: -40,
-                      scale: 1.1,
-                      zIndex: 50
+      {appStage === "selecting" && (
+          <div className="tarot-fan-scene min-h-[260px] flex items-center justify-center">
+            <div className="tarot-fan-scene__inner">
+            {appLoaded && isSelecting && (
+              <ul className="tarot-fan-track" key="main-tarot-fan">
+                {Array.from({ length: 22 }).map((_, i) => (
+                  <motion.li
+                    key={`fan-card-${i}`}
+                    layoutId={`fan-card-${i}`}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{
+                      duration: 0.5,
+                      delay: i * 0.02,
+                      ease: "easeOut",
                     }}
-                    transition={{ 
-                      type: "spring", 
-                      stiffness: 250, 
-                      damping: 18 
-                    }}
+                    className="tarot-fan-cell cursor-pointer"
+                    style={
+                      {
+                        "--i": i,
+                        visibility:
+                          clickedIndex !== null && clickedIndex !== i
+                            ? "hidden"
+                            : "visible",
+                      } as CSSProperties
+                    }
+                    onClick={() => handleSelectFromFan(i)}
                   >
-                    <div className="tarot-fan-face relative h-full w-full overflow-hidden rounded-none shadow-xl">
-                      <img
-                        src="/tarot/维特牌背.jpg"
-                        className="h-full w-full rounded-none object-cover object-center"
-                        alt={t(locale, "ariaFanCard")}
-                        draggable={false}
-                      />
-                      <div className="absolute inset-0 bg-violet-500/10 opacity-0 hover:opacity-100 transition-opacity" />
-                    </div>
-                  </motion.div>
-                </motion.li>
-              ))}
-            </ul>
-          )}
+                    <motion.div
+                      className="h-full w-full"
+                      initial={{ y: 0 }}
+                      whileHover={{
+                        y: -40,
+                        scale: 1.1,
+                        zIndex: 50,
+                      }}
+                      transition={{
+                        type: "spring",
+                        stiffness: 250,
+                        damping: 18,
+                      }}
+                    >
+                      <div className="tarot-fan-face relative h-full w-full overflow-hidden rounded-none shadow-xl">
+                        <img
+                          src="/tarot/维特牌背.jpg"
+                          className="h-full w-full rounded-none object-cover object-center"
+                          alt={t(locale, "ariaFanCard")}
+                          draggable={false}
+                        />
+                        <div className="absolute inset-0 bg-violet-500/10 opacity-0 transition-opacity hover:opacity-100" />
+                      </div>
+                    </motion.div>
+                  </motion.li>
+                ))}
+              </ul>
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

@@ -12,6 +12,7 @@ export async function POST(req: Request) {
     cardName?: string;
     prompt?: string;
     isReversed?: boolean;
+    question?: string;
   } = {};
 
   try {
@@ -36,6 +37,10 @@ export async function POST(req: Request) {
           ? "Reversed"
           : "Upright";
 
+    const questionRaw =
+      typeof body.question === "string" ? body.question.trim() : "";
+    const hasQuestion = questionRaw.length > 0;
+
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       const msg =
@@ -50,10 +55,25 @@ export async function POST(req: Request) {
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
-    const systemPrompt =
-      locale === "en"
-        ? `You are a mystical tarot master. The querent drew **${cardForPrompt}** in **${isReversedStatus}**. Upright and reversed meanings differ sharply—honor this orientation. In a secretive, concise tone, write about 120 words of guidance for today's path and give one concrete suggestion.`
-        : `你是一位神秘的塔罗大师。用户刚刚抽到了【${cardForPrompt}】的【${isReversedStatus}】。请仔细考虑该牌在这个状态下的牌意（正位和逆位含义截然不同）。用神秘、简洁的语气，为用户撰写一段大约 100 字的今日运势，并且给出具体的建议。`;
+    const questionBlockZh = hasQuestion
+      ? `用户现在正在思考的问题是：「${questionRaw}」。请严格围绕这个问题，结合抽到的【${cardForPrompt}-${isReversedStatus}】进行解牌。`
+      : "";
+
+    const questionBlockEn = hasQuestion
+      ? `The querent's guiding question is: "${questionRaw}". Stay strictly anchored to this question while interpreting **${cardForPrompt}** (${isReversedStatus}).`
+      : "";
+
+    const baseZh = `你是一位神秘的塔罗大师。用户刚刚抽到了【${cardForPrompt}】的【${isReversedStatus}】。请仔细考虑该牌在这个状态下的牌意（正位和逆位含义截然不同）。用神秘、简洁的语气，为用户撰写一段大约 100 字的运势解读，并且给出具体的建议。`;
+
+    const baseEn = `You are a mystical tarot master. The querent drew **${cardForPrompt}** in **${isReversedStatus}**. Upright and reversed meanings differ sharply—honor this orientation. In a secretive, concise tone, write about 80 words of guidance and give one concrete suggestion.`;
+
+    const systemPrompt = locale === "en"
+      ? hasQuestion
+        ? `${questionBlockEn}\n\n${baseEn}`
+        : `${baseEn} The querent offered no specific question—give a timeless, general reading aligned with the card.`
+      : hasQuestion
+        ? `${questionBlockZh}\n\n${baseZh}`
+        : `${baseZh} 用户未提出具体问题，请进行通用、无特定主题的占卜指引。`;
 
     const result = await model.generateContent(systemPrompt);
     const fullText = result.response.text();
