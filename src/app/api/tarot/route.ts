@@ -9,8 +9,7 @@ function parseLocale(v: unknown): Locale {
 export async function POST(req: Request) {
   let body: {
     locale?: unknown;
-    cardName?: string;
-    prompt?: string;
+    cardName?: string; // ✅ 只保留牌名，彻底删除 prompt 字段
     isReversed?: boolean;
     question?: string;
   } = {};
@@ -24,7 +23,10 @@ export async function POST(req: Request) {
   const locale = parseLocale(body.locale);
 
   try {
-    const cardZh = body.cardName || body.prompt || "愚者";
+    // ✅ 安全修复：严格限制牌名只能从 cardName 获取，杜绝外界提示词注入
+    const rawCardName = typeof body.cardName === "string" ? body.cardName.trim() : "";
+    const cardZh = rawCardName || "愚者"; 
+    
     const cardForPrompt =
       locale === "en" ? getCardDisplayName(cardZh, "en") : cardZh;
 
@@ -63,9 +65,9 @@ export async function POST(req: Request) {
       ? `The querent's guiding question is: "${questionRaw}". Stay strictly anchored to this question while interpreting **${cardForPrompt}** (${isReversedStatus}).`
       : "";
 
-    const baseZh = `你是一位神秘的塔罗大师。用户刚刚抽到了【${cardForPrompt}】的【${isReversedStatus}】。请仔细考虑该牌在这个状态下的牌意（正位和逆位含义截然不同）。用神秘、简洁的语气，为用户撰写一段大约 100 字的运势解读，并且给出具体的建议。`;
+    const baseZh = `你是一位神秘的塔罗大师。用户刚刚抽到了【${cardForPrompt}】的【${isReversedStatus}】。请仔细考虑该牌在这个状态下的牌意（正位和逆位含义截然不同）。用神秘、简洁的语气，为用户撰写一段大约 100 字的运势解读，并且给出具体的建议。别的内容一概不要回答。`;
 
-    const baseEn = `You are a mystical tarot master. The querent drew **${cardForPrompt}** in **${isReversedStatus}**. Upright and reversed meanings differ sharply—honor this orientation. In a secretive, concise tone, write about 80 words of guidance and give one concrete suggestion.`;
+    const baseEn = `You are a mystical tarot master. The querent drew **${cardForPrompt}** in **${isReversedStatus}**. Upright and reversed meanings differ sharply—honor this orientation. In a secretive, concise tone, write about 80 words of guidance and give one concrete suggestion. Do not answer anything else.`;
 
     const systemPrompt = locale === "en"
       ? hasQuestion
