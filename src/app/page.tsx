@@ -67,21 +67,78 @@ export default function Home() {
     }
   };
 
+  // 🌟 新增：云端每日限制状态对账与页面重构函数
+  const checkCloudDrawStatus = async (userId: string, currentLocale: Locale) => {
+    try {
+      const startOfToday = new Date();
+      startOfToday.setHours(0, 0, 0, 0); // 取今天当地时间凌晨 00:00:00
+
+      // 去云端拉取该用户今天生成的、且排除隐藏报错的高质量抽卡数据
+      const { data, error } = await supabase
+        .from('DrawLog')
+        .select('*')
+        .eq('user_id', userId)
+        .gte('created_at', startOfToday.toISOString())
+        .not('ai_reading', 'ilike', '[HIDDEN_ERROR]%')
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (error) {
+        console.error("守护结界同步失败:", error);
+        return;
+      }
+
+      // 如果发现今天已经有成功的日志，直接阻断并重构为今日解牌完成页
+      if (data && data.length > 0) {
+        const todayLog = data[0];
+        setIsReversed(todayLog.is_reversed);
+        setCurrentCard(todayLog.card_name);
+        setFlipped(true);
+        setIsSelecting(false);
+        setAppStage("reading");
+        setUserQuestion(todayLog.question || "");
+        
+        if (todayLog.ai_reading) {
+          setCompletion(formatDailyRecap(todayLog.ai_reading, currentLocale));
+        } else {
+          setCompletion(`🔮 能量正在恢复中...`);
+        }
+      }
+    } catch (e) {
+      console.error("星界同步异常:", e);
+    }
+  };
+
+  // 🌟 升级：身份监听器，登录时立刻绑定云端状态校验
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       const currentUser = session?.user ?? null;
       setUser(currentUser);
+      
+      let activeLocale = locale;
       if (currentUser?.user_metadata?.locale) {
-        setLocale(currentUser.user_metadata.locale as Locale);
+        activeLocale = currentUser.user_metadata.locale as Locale;
+        setLocale(activeLocale);
+      }
+      
+      if (currentUser) {
+        await checkCloudDrawStatus(currentUser.id, activeLocale);
       }
       setAppLoaded(true); 
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       const currentUser = session?.user ?? null;
       setUser(currentUser);
+      
+      let activeLocale = locale;
       if (currentUser?.user_metadata?.locale) {
-        setLocale(currentUser.user_metadata.locale as Locale);
+        activeLocale = currentUser.user_metadata.locale as Locale;
+        setLocale(activeLocale);
+      }
+
+      if (currentUser && (event === "SIGNED_IN" || event === "INITIAL_SESSION")) {
+        await checkCloudDrawStatus(currentUser.id, activeLocale);
       }
     });
 
@@ -148,7 +205,7 @@ export default function Home() {
     window.location.reload(); 
   };
   
-  // 🌟 核心修改 1：拉取历史记录时，过滤掉包含隐藏错误的日志
+  // 拉取历史记录时，过滤掉包含隐藏错误的日志
   const fetchHistory = async () => {
     if (!user) return;
     setIsLoadingHistory(true);
@@ -178,7 +235,7 @@ export default function Home() {
       api: "/api/tarot",
       streamProtocol: "text",
       
-      // 🌟 核心修改 2：拦截底层网络/503报错，偷偷存入数据库
+      // 拦截底层网络/503报错，偷偷存入数据库
       onError: async (err) => {
         if (!user) return;
         const savedQ = localStorage.getItem(LS_USER_QUESTION) || "";
@@ -195,7 +252,7 @@ export default function Home() {
       },
 
       onFinish: async (_prompt, result) => { 
-        // 🌟 核心修改 3：拦截伪装成正常返回的后端错误文本
+        // 拦截伪装成正常返回的后端错误文本
         const isErrorText = result.includes("Error") || result.includes("limit") || result.includes("【魔法阵崩溃】") || result.includes("[Ritual interrupted]") || result.includes("503");
 
         if (isErrorText) {
@@ -241,31 +298,7 @@ export default function Home() {
     if (typeof window !== "undefined") localStorage.setItem(LOCALE_STORAGE_KEY, locale);
   }, [locale]);
 
-  useEffect(() => {
-    if (!appLoaded) return;
-    const today = new Date().toLocaleDateString();
-    const lastDrawDate = localStorage.getItem("tarot_last_draw_date");
-
-    if (lastDrawDate === today) {
-      const savedCard = localStorage.getItem("tarot_last_drawn_card") || "命运之轮";
-      const savedReversed = localStorage.getItem("tarot_last_card_reversed") === "true";
-      const savedQ = localStorage.getItem(LS_USER_QUESTION) ?? "";
-
-      setIsReversed(savedReversed);
-      setCurrentCard(savedCard);
-      setFlipped(true);
-      setIsSelecting(false);
-      setAppStage("reading");
-      setUserQuestion(savedQ);
-
-      const savedReading = localStorage.getItem("tarot_last_ai_reading");
-      if (savedReading) {
-        setCompletion(formatDailyRecap(savedReading, locale));
-      } else {
-        setCompletion(`🔮 能量正在恢复中...`);
-      }
-    }
-  }, [appLoaded, setCompletion, locale]);
+  // 🌟 核心删除：移除了原本在这里纯粹依赖 localStorage 的全量重置逻辑，交给上方的云端对账统一托管
 
   const enterSpread = () => {
     const q = userQuestion.trim();
@@ -315,14 +348,14 @@ export default function Home() {
       ? t(locale, "readingDone")
       : t(locale, "readingWait");
 
-  // 🌟 核心修改 4：错误状态雷达判定
+  // 错误状态雷达判定
   const isErrorState = error || completion.includes("[HIDDEN_ERROR]") || completion.includes("【魔法阵崩溃】") || completion.includes("[Ritual interrupted]") || completion.includes("能量正在恢复中");
 
   if (!appLoaded) {
     return <div className="min-h-screen bg-[#05030a]" />;
   }
 
-  // 👇 未登录拦截页面
+  // 未登录拦截页面
   if (!user) {
     return (
       <div className="relative flex h-screen w-full flex-col items-center justify-center overflow-hidden bg-[#05030a] font-sans text-zinc-50">
@@ -469,11 +502,11 @@ export default function Home() {
                     <span className={isLoading ? "animate-pulse text-violet-400" : ""}>{readingStatusLabel}</span>
                   </div>
                   
-                  {/* 🌟 核心修改 5：使用防御层，如果遇到错误，只展示重试按钮和优雅提示 */}
+                  {/* 使用防御层，如果遇到错误，只展示重试按钮和优雅提示 */}
                   <div className="min-h-[120px] whitespace-pre-wrap text-left font-serif text-[15px] italic leading-8 text-zinc-200">
                     {isErrorState || (isEnergyRecoveryBlock(completion) && !isLoading) ? (
                       <div className="flex flex-col items-start text-sm text-red-400/80">
-                        <p>{locale === "zh" ? "🔮 网络波动，请稍后重新尝试解牌。" : "🔮 The astral connection is disrupted. Please retry reading."}</p>
+                        <p>{locale === "zh" ? "🔮 网络输入波动或占卜受阻，请重新尝试召唤解牌。" : "🔮 The astral connection is disrupted. Please retry reading."}</p>
                         <button type="button" onClick={retryReading} className="mt-4 border border-violet-500/50 px-5 py-2 text-xs text-violet-400">{t(locale, "retryButton")}</button>
                       </div>
                     ) : completion ? completion : isLoading ? null : (
@@ -514,15 +547,8 @@ export default function Home() {
       <AnimatePresence>
         {isSidebarOpen && (
           <>
-            <motion.div 
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              onClick={() => setIsSidebarOpen(false)}
-              className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm"
-            />
-            <motion.div 
-              initial={{ x: "-100%" }} animate={{ x: 0 }} exit={{ x: "-100%" }} transition={{ type: "spring", bounce: 0, duration: 0.4 }}
-              className="fixed left-0 top-0 bottom-0 z-[101] w-72 max-w-[80vw] bg-[#0a0612] border-r border-white/10 flex flex-col shadow-2xl"
-            >
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsSidebarOpen(false)} className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm" />
+            <motion.div initial={{ x: "-100%" }} animate={{ x: 0 }} exit={{ x: "-100%" }} transition={{ type: "spring", bounce: 0, duration: 0.4 }} className="fixed left-0 top-0 bottom-0 z-[101] w-72 max-w-[80vw] bg-[#0a0612] border-r border-white/10 flex flex-col shadow-2xl">
               <div className="p-8 pb-6 border-b border-white/5 flex flex-col items-center text-center">
                 {user.user_metadata?.avatar_url ? (
                   <img src={user.user_metadata.avatar_url} className="w-20 h-20 rounded-full border-2 border-violet-500/30 object-cover shadow-[0_0_20px_rgba(139,92,246,0.2)]" />
@@ -531,37 +557,26 @@ export default function Home() {
                     {(user.user_metadata?.full_name || user.email || "U").charAt(0).toUpperCase()}
                   </div>
                 )}
-                <h3 className="mt-4 text-lg font-medium text-white">
-                  {user.user_metadata?.full_name || user.email?.split('@')[0] || "神秘学徒"}
-                </h3>
+                <h3 className="mt-4 text-lg font-medium text-white">{user.user_metadata?.full_name || user.email?.split('@')[0] || "神秘学徒"}</h3>
                 <p className="text-xs text-zinc-500 mt-1 truncate w-full">{user.email}</p>
               </div>
 
               <div className="flex-1 py-6 px-4 space-y-2 overflow-y-auto">
                 <button 
-                  onClick={() => {
-                    fetchHistory();
-                    setShowHistory(true);
-                    setIsSidebarOpen(false);
-                  }}
+                  onClick={() => { fetchHistory(); setShowHistory(true); setIsSidebarOpen(false); }}
                   className="w-full flex items-center gap-4 px-4 py-3.5 text-sm text-zinc-300 hover:text-white hover:bg-white/5 rounded-2xl transition-colors text-left"
                 >
-                  <span className="text-lg">📖</span>
-                  {locale === "zh" ? "命运日志 (历史记录)" : "Destiny Log (History)"}
+                  <span className="text-lg">📖</span>{locale === "zh" ? "命运日志 (历史记录)" : "Destiny Log (History)"}
                 </button>
                 <button className="w-full flex items-center gap-4 px-4 py-3.5 text-sm text-zinc-500 hover:bg-white/5 rounded-2xl transition-colors text-left cursor-not-allowed">
-                  <span className="text-lg opacity-50">🔮</span>
-                  {locale === "zh" ? "牌阵解锁 (敬请期待)" : "Spreads (Coming Soon)"}
+                  <span className="text-lg opacity-50">🔮</span>{locale === "zh" ? "牌阵解锁 (敬请期待)" : "Spreads (Coming Soon)"}
                 </button>
               </div>
 
               <div className="p-4 border-t border-white/5">
-                <button 
-                  onClick={handleLogout}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm text-red-400/80 hover:text-red-400 hover:bg-red-400/10 rounded-2xl transition-colors"
-                >
+                <button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm text-red-400/80 hover:text-red-400 hover:bg-red-400/10 rounded-2xl transition-colors">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
-                  {locale === "zh" ? "登出" : "Logout"}
+                  {locale === "zh" ? "断开结界 (登出)" : "Sever Connection (Logout)"}
                 </button>
               </div>
             </motion.div>
@@ -572,77 +587,47 @@ export default function Home() {
       {/* 交互式可展开的全屏历史记录弹出层 */}
       <AnimatePresence>
         {showHistory && (
-          <motion.div 
-            initial={{ opacity: 0, y: "100%" }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: "100%" }} transition={{ type: "spring", damping: 25, stiffness: 200 }}
-            className="fixed inset-0 z-[120] bg-[#05030a] overflow-y-auto"
-          >
+          <motion.div initial={{ opacity: 0, y: "100%" }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: "100%" }} transition={{ type: "spring", damping: 25, stiffness: 200 }} className="fixed inset-0 z-[120] bg-[#05030a] overflow-y-auto">
             <div className="sticky top-0 z-10 bg-[#05030a]/80 backdrop-blur-xl border-b border-white/10 px-6 py-4 flex items-center justify-between">
-              <h2 className="text-xl font-light tracking-widest text-zinc-100">
-                {locale === "zh" ? "命运日志" : "Destiny Log"}
-              </h2>
-              <button 
-                onClick={() => {
-                  setShowHistory(false);
-                  setExpandedLogId(null); 
-                }}
-                className="p-2 text-zinc-400 hover:text-white rounded-full bg-white/5 hover:bg-white/10 transition-colors"
-              >
+              <h2 className="text-xl font-light tracking-widest text-zinc-100">{locale === "zh" ? "命运日志" : "Destiny Log"}</h2>
+              <button onClick={() => { setShowHistory(false); setExpandedLogId(null); }} className="p-2 text-zinc-400 hover:text-white rounded-full bg-white/5 hover:bg-white/10 transition-colors">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
 
             <div className="max-w-2xl mx-auto px-4 py-8 flex flex-col gap-6">
               {isLoadingHistory ? (
-                <div className="flex justify-center py-20 text-violet-400 animate-pulse">
-                  {locale === "zh" ? "正在翻阅阿卡西记录..." : "Retrieving Akashic Records..."}
-                </div>
+                <div className="flex justify-center py-20 text-violet-400 animate-pulse">{locale === "zh" ? "正在翻阅阿卡西记录..." : "Retrieving Akashic Records..."}</div>
               ) : historyLogs.length === 0 ? (
                 <div className="flex flex-col items-center text-center py-20 text-zinc-500">
-                  <div className="text-4xl mb-4">🪶</div>
-                  <p>{locale === "zh" ? "你的命运之书还是一片空白" : "Your Book of Destiny is empty"}</p>
+                  <div className="text-4xl mb-4">🪶</div><p>{locale === "zh" ? "你的命运之书还是一片空白" : "Your Book of Destiny is empty"}</p>
                 </div>
               ) : (
                 historyLogs.map((log) => {
                   const isExpanded = expandedLogId === log.id;
-                  
                   return (
-                    <motion.div 
-                      layout
-                      key={log.id} 
-                      onClick={() => setExpandedLogId(isExpanded ? null : log.id)}
-                      className="bg-white/[0.03] border border-white/10 rounded-2xl p-5 md:p-6 shadow-xl flex flex-col gap-4 cursor-pointer transition-colors hover:bg-white/[0.06]"
-                    >
+                    <motion.div layout key={log.id} onClick={() => setExpandedLogId(isExpanded ? null : log.id)} className="bg-white/[0.03] border border-white/10 rounded-2xl p-5 md:p-6 shadow-xl flex flex-col gap-4 cursor-pointer transition-colors hover:bg-white/[0.06]">
                       <div className={`flex justify-between items-start ${isExpanded ? "border-b border-white/5 pb-4" : ""}`}>
                         <div>
                           <div className="text-xs text-zinc-500 mb-1 font-mono tracking-wider">{formatDate(log.created_at)}</div>
                           <div className="text-lg font-bold text-violet-300 drop-shadow-md">
                             {locale === "en" ? getCardDisplayName(log.card_name, "en") : log.card_name} 
-                            <span className="text-xs ml-2 font-normal text-zinc-400 border border-white/10 px-2 py-0.5 rounded-full bg-black/30">
-                              {log.is_reversed ? (locale === "zh" ? "逆位" : "Reversed") : (locale === "zh" ? "正位" : "Upright")}
-                            </span>
+                            <span className="text-xs ml-2 font-normal text-zinc-400 border border-white/10 px-2 py-0.5 rounded-full bg-black/30">{log.is_reversed ? (locale === "zh" ? "逆位" : "Reversed") : (locale === "zh" ? "正位" : "Upright")}</span>
                           </div>
                         </div>
-                        
                         <motion.div animate={{ rotate: isExpanded ? 180 : 0 }} className="text-zinc-500 mt-1">
                           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                         </motion.div>
                       </div>
-                      
                       {log.question && (
                         <div className="bg-black/40 rounded-xl p-4 border border-white/5">
                           <div className="text-[10px] text-zinc-500 mb-1">{locale === "zh" ? "所测之惑" : "Question"}</div>
                           <div className={`text-sm text-zinc-200 leading-relaxed italic ${!isExpanded ? "line-clamp-2" : ""}`}>"{log.question}"</div>
                         </div>
                       )}
-                      
                       <AnimatePresence>
                         {isExpanded && (
-                          <motion.div
-                            initial={{ opacity: 0, height: 0 }}
-                            animate={{ opacity: 1, height: "auto" }}
-                            exit={{ opacity: 0, height: 0 }}
-                            className="overflow-hidden"
-                          >
+                          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
                             <div className="pt-2">
                               <div className="text-[10px] text-zinc-500 mb-2">{locale === "zh" ? "神谕启示" : "Revelation"}</div>
                               <div className="text-sm text-zinc-300 leading-7 font-serif whitespace-pre-wrap">{log.ai_reading}</div>
