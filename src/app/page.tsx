@@ -67,7 +67,7 @@ export default function Home() {
     }
   };
 
-  // 🌟 新增：云端每日限制状态对账与页面重构函数
+  // 云端每日限制状态对账与页面重构函数
   const checkCloudDrawStatus = async (userId: string, currentLocale: Locale) => {
     try {
       const startOfToday = new Date();
@@ -109,7 +109,7 @@ export default function Home() {
     }
   };
 
-  // 🌟 升级：身份监听器，登录时立刻绑定云端状态校验
+  // 身份监听器，登录时立刻绑定云端状态校验
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       const currentUser = session?.user ?? null;
@@ -210,19 +210,24 @@ export default function Home() {
     if (!user) return;
     setIsLoadingHistory(true);
     
-    const { data, error } = await supabase
-      .from('DrawLog')
-      .select('*')
-      .eq('user_id', user.id)
-      .not('ai_reading', 'ilike', '[HIDDEN_ERROR]%') // 过滤隐蔽报错
-      .order('created_at', { ascending: false }); 
+    try {
+      const { data, error } = await supabase
+        .from('DrawLog')
+        .select('*')
+        .eq('user_id', user.id)
+        .not('ai_reading', 'ilike', '[HIDDEN_ERROR]%') // 过滤隐蔽报错
+        .order('created_at', { ascending: false }); 
 
-    if (error) {
-      console.error("拉取历史记录失败:", error);
-    } else if (data) {
-      setHistoryLogs(data);
+      if (error) {
+        console.error("拉取历史记录失败:", error);
+      } else if (data) {
+        setHistoryLogs(data);
+      }
+    } catch (err) {
+      console.error("星界通信发生未预料的异常:", err);
+    } finally {
+      setIsLoadingHistory(false); 
     }
-    setIsLoadingHistory(false);
   };
 
   const formatDate = (dateStr: string) => {
@@ -235,9 +240,11 @@ export default function Home() {
       api: "/api/tarot",
       streamProtocol: "text",
       
-      // 拦截底层网络/503报错，偷偷存入数据库
+      // 🌟 核心修改 1：拦截底层网络/503报错，使用 currentUser 破除闭包
       onError: async (err) => {
-        if (!user) return;
+        const { data: { user: currentUser } } = await supabase.auth.getUser();
+        if (!currentUser) return;
+
         const savedQ = localStorage.getItem(LS_USER_QUESTION) || "";
         const savedC = localStorage.getItem("tarot_last_drawn_card") || "未知卡牌";
         const savedR = localStorage.getItem("tarot_last_card_reversed") === "true";
@@ -247,16 +254,19 @@ export default function Home() {
           is_reversed: savedR,
           question: savedQ,
           ai_reading: `[HIDDEN_ERROR] API Network Crash: ${err.message}`, 
-          user_id: user.id 
+          user_id: currentUser.id 
         }]);
       },
 
+      // 🌟 核心修改 2：使用 currentUser 破除闭包
       onFinish: async (_prompt, result) => { 
+        const { data: { user: currentUser } } = await supabase.auth.getUser();
+
         // 拦截伪装成正常返回的后端错误文本
         const isErrorText = result.includes("Error") || result.includes("limit") || result.includes("【魔法阵崩溃】") || result.includes("[Ritual interrupted]") || result.includes("503");
 
         if (isErrorText) {
-          if (user) {
+          if (currentUser) {
             const savedQ = localStorage.getItem(LS_USER_QUESTION) || "";
             const savedC = localStorage.getItem("tarot_last_drawn_card") || "未知卡牌";
             const savedR = localStorage.getItem("tarot_last_card_reversed") === "true";
@@ -265,7 +275,7 @@ export default function Home() {
               is_reversed: savedR,
               question: savedQ,
               ai_reading: `[HIDDEN_ERROR] Backend Exception: ${result}`,
-              user_id: user.id 
+              user_id: currentUser.id 
             }]);
           }
           return; // 发现错误即终止
@@ -278,17 +288,19 @@ export default function Home() {
           const savedCard = localStorage.getItem("tarot_last_drawn_card") || "未知卡牌";
           const savedReversed = localStorage.getItem("tarot_last_card_reversed") === "true";
 
-          const { error: dbError } = await supabase
-            .from('DrawLog')
-            .insert([{
-                card_name: savedCard,
-                is_reversed: savedReversed,
-                question: savedQuestion,
-                ai_reading: result,
-                user_id: user?.id 
-            }]);
+          if (currentUser) {
+            const { error: dbError } = await supabase
+              .from('DrawLog')
+              .insert([{
+                  card_name: savedCard,
+                  is_reversed: savedReversed,
+                  question: savedQuestion,
+                  ai_reading: result,
+                  user_id: currentUser.id 
+              }]);
 
-          if (dbError) console.error("保存云端记录失败:", dbError);
+            if (dbError) console.error("保存云端记录失败:", dbError);
+          }
         }
       },
     });
@@ -297,8 +309,6 @@ export default function Home() {
     document.documentElement.lang = locale === "zh" ? "zh-CN" : "en";
     if (typeof window !== "undefined") localStorage.setItem(LOCALE_STORAGE_KEY, locale);
   }, [locale]);
-
-  // 🌟 核心删除：移除了原本在这里纯粹依赖 localStorage 的全量重置逻辑，交给上方的云端对账统一托管
 
   const enterSpread = () => {
     const q = userQuestion.trim();
@@ -606,7 +616,7 @@ export default function Home() {
                 historyLogs.map((log) => {
                   const isExpanded = expandedLogId === log.id;
                   return (
-                    <motion.div layout key={log.id} onClick={() => setExpandedLogId(isExpanded ? null : log.id)} className="bg-white/[0.03] border border-white/10 rounded-2xl p-5 md:p-6 shadow-xl flex flex-col gap-4 cursor-pointer transition-colors hover:bg-white/[0.06]">
+                    <motion.div layout="position" key={log.id} onClick={() => setExpandedLogId(isExpanded ? null : log.id)} className="bg-white/[0.03] border border-white/10 rounded-2xl p-5 md:p-6 shadow-xl flex flex-col gap-4 cursor-pointer transition-colors hover:bg-white/[0.06]">
                       <div className={`flex justify-between items-start ${isExpanded ? "border-b border-white/5 pb-4" : ""}`}>
                         <div>
                           <div className="text-xs text-zinc-500 mb-1 font-mono tracking-wider">{formatDate(log.created_at)}</div>
