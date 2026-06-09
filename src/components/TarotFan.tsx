@@ -2,6 +2,7 @@
 "use client";
 
 import { motion } from "framer-motion";
+import { useEffect, useState } from "react";
 
 interface TarotFanProps {
   isOpen: boolean;
@@ -16,26 +17,43 @@ export default function TarotFan({
   clickedIndex,
   onSelectCard,
 }: TarotFanProps) {
+  const [isMobile, setIsMobile] = useState(false);
+
+  // 监听屏幕宽度
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 640);
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
+
   if (!isOpen || !isSelecting) return null;
 
-  const totalCards = 56;//56张扇形组合牌
+  const totalCards = 56; // 👑 史诗级 56张小阿尔卡纳全牌组
 
   return (
-    // 🌟 整个容器高度完全收拢到 160px，底下绝无多余透明空白！
-    <div className="w-full h-[160px] sm:h-[180px] relative flex items-center justify-center overflow-visible py-4">
+    // 🌟 1. 调整容器高度，手机端高 160px（给放大的牌留出空间），电脑端保持 220px
+    <div className={`w-full relative flex items-center justify-center overflow-visible py-4 ${isMobile ? "h-[160px]" : "h-[220px]"}`}>
       <div className="relative w-full max-w-2xl h-full flex items-center justify-center overflow-visible">
         {Array.from({ length: totalCards }).map((_, i) => {
           const isCurrentClicked = clickedIndex === i;
           const hasAnyBeenClicked = clickedIndex !== null;
           if (hasAnyBeenClicked && !isCurrentClicked) return null;
 
-          // 🌟 核心：计算每张牌的重叠错开位置
-          // 通过 -translate-x 让它们围绕中心紧密层层堆叠，再加上微微的旋转角度 (rotate)，做出极其自然的弧形扇面堆叠！
-          const centerIndex = (totalCards - 1) / 2;
+          const centerIndex = (totalCards - 1) / 2; // 中心索引
           const offset = i - centerIndex;
-          const rotateAngle = offset * 1.2; // 每张牌偏转 1.2度
-          const translateX = offset * 17;   // 每张牌横向错开 17px（数字越小，叠得越紧密）
-          const translateY = Math.abs(offset) * 0.7; // 形成一个微微向下拱的优雅弧度
+          
+          // 🌟 2. 手机端 56张牌美化几何算法（解决“太小不好看”的核心）
+          // 手机端：让牌堆形成一个紧密的双排交错折扇结构
+          // 偏转角度在手机上微调为 0.8度，让整体弧度更柔和
+          const rotateAngle = offset * (isMobile ? 0.8 : 1.2); 
+          
+          // 🌟 3. 手机端横向错开距离调大到 7px（之前是 5.5px，太挤了）。
+          // 55 * 7 = 385px，这刚好是一个主流手机屏幕的宽度极限。
+          const translateX = offset * (isMobile ? 7 : 17);   
+          
+          // 纵向弧度微调，手机端让两边微微向下，形成优雅的重叠感
+          const translateY = Math.abs(offset) * (isMobile ? 0.8 : 0.7); 
 
           return (
             <motion.div
@@ -49,8 +67,11 @@ export default function TarotFan({
                 rotate: rotateAngle
               }}
               exit={{ opacity: 0, scale: 0.9 }}
-              transition={{ duration: 0.4, delay: isCurrentClicked ? 0 : i * 0.01, ease: "easeOut" }}
-              className="absolute w-[76px] h-[130px] sm:w-[105px] sm:h-[175px] cursor-pointer"
+              transition={{ duration: 0.4, delay: isCurrentClicked ? 0 : i * 0.006, ease: "easeOut" }}
+              // 🌟 4. 跨端双套物理尺寸（大幅提升手机端视觉）
+              // 手机端：宽 68px, 高 115px （这是一个既能看清牌背纹理，又能在屏幕内完美堆叠的舒适尺寸！）
+              // 电脑端：保持你最满意的 105x175 大气尺寸
+              className="absolute w-[68px] h-[115px] sm:w-[105px] sm:h-[175px] cursor-pointer"
               style={{
                 zIndex: i, // 完美的层层压盖顺序
                 transformOrigin: "bottom center"
@@ -58,15 +79,15 @@ export default function TarotFan({
               onClick={() => onSelectCard(i)}
             >
               <motion.div
-                className="h-full w-full rounded-sm overflow-hidden border border-white/10 shadow-[0_4px_12px_rgba(0,0,0,0.5)] bg-zinc-900"
+                className="h-full w-full rounded-sm overflow-hidden border border-white/10 bg-zinc-900 shadow-[0_4px_12px_rgba(0,0,0,0.5)]"
                 initial={{ y: 0 }}
-                // 🌟 当鼠标划过某张叠着的牌时，它会完美地挺直、向上拔起 35px，并且放大、图层提到最前，仪式感直接拉满！
+                // 🌟 5. 悬停反馈微调：手机上往上拔 25px 并提到最高层，仪式感更强！
                 whileHover={{ 
-                  y: -35, 
+                  y: isMobile ? -25 : -35, 
                   scale: 1.15, 
-                  rotate: 0, // 悬停时牌会变正，方便看清
-                  zIndex: 100,
-                  boxShadow: "0 12px 24px rgba(139, 92, 246, 0.3)"
+                  rotate: 0, 
+                  zIndex: 200, // 提到最高层
+                  boxShadow: "0 12px 24px rgba(139, 92, 246, 0.35)"
                 }}
                 transition={{ type: "spring", stiffness: 260, damping: 16 }}
               >

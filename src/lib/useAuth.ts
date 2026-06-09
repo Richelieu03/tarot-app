@@ -74,12 +74,19 @@ export function useAuth(locale: Locale, setLocale: (l: Locale) => void) {
 
   const handleLogout = async () => {
     try {
+      // 1. 🌟 加上 await，必须等待 Supabase 官方彻底断开连接
       await supabase.auth.signOut();
     } catch (err) {
       console.error("Supabase 结界断开异常:", err);
     }
+    
+    // 2. 🌟 核心修复：手动清空当前状态，让主页（Home）的 if(!user) 瞬间收到清空通知，秒切回登录墙！
+    setUser(null);
+    setTodayCloudLog(null);
+    
+    // 3. 清空本地缓存
     localStorage.clear();
-    window.location.reload(); 
+    
   };
 
   return { user, appLoaded, todayCloudLog, handleLogout };

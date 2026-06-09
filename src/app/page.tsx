@@ -146,8 +146,18 @@ export default function Home() {
     if (flipped || isSelecting) return;
     setAppStage("reading");
     setFlipped(true);
+
+    // 🌟 核心修正：第一次解牌时，直接去 localStorage 里面抓绝对不会延迟的真卡牌名字和正反位！
+    const realCardName = localStorage.getItem("tarot_last_drawn_card") || currentCard;
+    const realIsReversed = localStorage.getItem("tarot_last_card_reversed") === "true";
+
     void complete(t(locale, "readPrompt"), { 
-      body: { cardName: currentCard, isReversed, locale, question: userQuestion.trim() } 
+      body: { 
+        cardName: realCardName, // 绝对及时的真实卡牌名
+        isReversed: realIsReversed, // 绝对及时的真实正反位
+        locale, 
+        question: userQuestion.trim() 
+      } 
     });
   };
 
@@ -163,9 +173,9 @@ export default function Home() {
   if (!user) return <AuthWall locale={locale} setLocale={setLocale} />;
 
   return (
-    <div className={`relative flex flex-col overflow-x-hidden bg-[#05030a] font-sans text-zinc-50 ${appStage === "reading" ? "min-h-screen overflow-y-auto" : "h-screen overflow-hidden w-full fixed inset-0"}`}>
+    <div className={`relative flex flex-col overflow-x-hidden bg-[#05030a] font-sans text-zinc-50 ${user && appStage === "reading" ? "min-h-screen overflow-y-auto" : "h-screen overflow-hidden w-full fixed inset-0"}`}>
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(900px_520px_at_50%_25%,rgba(140,70,255,0.25),transparent_60%)]" />
-
+      
       {/* 左上角用户大门入口按钮 */}
       <div className="fixed left-4 top-4 z-[90]">
         <button onClick={() => setIsSidebarOpen(true)} className="flex items-center gap-2.5 rounded-full border border-white/15 bg-black/45 p-1.5 pr-4 backdrop-blur-md hover:bg-white/10 transition-colors shadow-lg">
@@ -177,7 +187,7 @@ export default function Home() {
       <LocaleSwitcher currentLocale={locale} onSetLocale={handleSetLocale} />
 
       {/* 主画布内容区 */}
-      <main className="relative z-10 flex w-full max-w-3xl flex-col items-center px-6 text-center mx-auto pt-20">
+      <main className="relative z-10 flex w-full max-w-3xl flex-col items-center px-6 text-center mx-auto pt-5">
         <AnimatePresence mode="wait">
           {appStage === "asking" ? (
             <motion.div key="ritual-asking" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} className="flex min-h-[70vh] w-full max-w-lg flex-col items-center justify-center gap-10">
@@ -195,14 +205,14 @@ export default function Home() {
           ) : (
             <motion.div key="spread-flow" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} className="flex w-full flex-col items-center">
               {/* 1. 主题文字 */}
-              <h1 className="mt-20 text-2xl font-semibold tracking-tight text-zinc-100 sm:text-4xl">{t(locale, "title")}</h1>
+              <h1 className="mt-10 text-2xl font-semibold tracking-tight text-zinc-100 sm:text-4xl">{t(locale, "title")}</h1>
               <p className="mt-4 text-sm text-zinc-400">{subtitleMain}</p>
 
               {/* 2. 3D塔罗卡牌 */}
-              <div className="my-6 flex items-center justify-center ">
+              <div className="my-3 flex items-center justify-center ">
                 <AnimatePresence mode="wait">
                 {!isSelecting && (
-                  <div className="my-6 flex items-center justify-center ">
+                  <div className="mb-6 flex items-center justify-center ">
                     <TarotCard
                       layoutId={clickedIndex !== null ? `fan-card-${clickedIndex}` : "tarot-main-card"}
                       cardName={currentCard}
@@ -239,7 +249,7 @@ export default function Home() {
                 placeholderText={isSelecting ? t(locale, "placeholderSelecting") : !flipped ? t(locale, "placeholderAfterPick") : t(locale, "placeholderThinking")}
                 readingStatusLabel={readingStatusLabel}
                 locale={locale}
-                className="mt-20" 
+                className={appStage === "reading" ? "-mt-10" : "mt-10"}
                 onRetry={() => void complete(t(locale, "readPrompt"), { 
                   body: { cardName: currentCard, isReversed, locale, question: userQuestion.trim() } 
                 })}
