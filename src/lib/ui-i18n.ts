@@ -90,3 +90,26 @@ export function isEnergyRecoveryBlock(completion: string): boolean {
     completion.includes(t("en", "energyErrorKeyword"))
   );
 }
+
+export const i18nData = {
+  zh: {
+    title: "星界神谕",
+    // ... 原有的保持不变 ...
+    
+    // 🌟 在这里把这三个新钥匙注册进去！
+    slotPast: "【过去】",
+    slotPresent: "【现在】",
+    slotFuture: "【未来】",
+    readSpreadPrompt: "请为我的三牌阵进行综合占卜：",
+  },
+  en: {
+    title: "Astral Oracle",
+    // ... 原有的保持不变 ...
+    
+    // 🌟 英文版也必须严格对称地注册进去！
+    slotPast: "Past",
+    slotPresent: "Present",
+    slotFuture: "Future",
+    readSpreadPrompt: "Please interpret my Three-Card Spread:",
+  }
+};

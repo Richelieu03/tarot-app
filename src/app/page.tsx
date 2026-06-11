@@ -1,10 +1,9 @@
 // src/app/page.tsx
-
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
 import { useCompletion } from "@ai-sdk/react";
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useState } from "react";
 import "./tarot-spread.css";
 import { pickRandomTarotCard } from "../lib/draw-random";
 import type { Locale } from "../lib/locale";
@@ -22,6 +21,7 @@ import TarotCard from "../components/TarotCard";
 import LocaleSwitcher from "../components/LocaleSwitcher"; 
 import TarotFan from "../components/TarotFan"; 
 import ReadingBox from "../components/ReadingBox";
+import SpreadSelector from "../components/SpreadSelector";
 
 type AppStage = "asking" | "selecting" | "reading";
 const LS_USER_QUESTION = "tarot_user_question";
@@ -78,7 +78,7 @@ export default function Home() {
     }
   };
 
-  // 2. AI useCompletion 钩子 (将其上移，保障 setCompletion 可被下方的对账监听复用)
+  // 2. AI useCompletion 钩子
   const { completion, complete, error, isLoading, setCompletion } = useCompletion({
     api: "/api/tarot",
     streamProtocol: "text",
@@ -108,7 +108,7 @@ export default function Home() {
     },
   });
 
-  // 3. 处理今日已对账完成的同步 (移至 useCompletion 声明下方，解除 undefined 隐蔽报错)
+  // 3. 处理今日已对账完成的同步
   useEffect(() => {
     if (todayCloudLog) {
       setIsReversed(todayCloudLog.is_reversed);
@@ -147,14 +147,13 @@ export default function Home() {
     setAppStage("reading");
     setFlipped(true);
 
-    // 🌟 核心修正：第一次解牌时，直接去 localStorage 里面抓绝对不会延迟的真卡牌名字和正反位！
     const realCardName = localStorage.getItem("tarot_last_drawn_card") || currentCard;
     const realIsReversed = localStorage.getItem("tarot_last_card_reversed") === "true";
 
     void complete(t(locale, "readPrompt"), { 
       body: { 
-        cardName: realCardName, // 绝对及时的真实卡牌名
-        isReversed: realIsReversed, // 绝对及时的真实正反位
+        cardName: realCardName, 
+        isReversed: realIsReversed, 
         locale, 
         question: userQuestion.trim() 
       } 
@@ -176,12 +175,15 @@ export default function Home() {
     <div className={`relative flex flex-col overflow-x-hidden bg-[#05030a] font-sans text-zinc-50 ${user && appStage === "reading" ? "min-h-screen overflow-y-auto" : "h-screen overflow-hidden w-full fixed inset-0"}`}>
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(900px_520px_at_50%_25%,rgba(140,70,255,0.25),transparent_60%)]" />
       
-      {/* 左上角用户大门入口按钮 */}
-      <div className="fixed left-4 top-4 z-[90]">
-        <button onClick={() => setIsSidebarOpen(true)} className="flex items-center gap-2.5 rounded-full border border-white/15 bg-black/45 p-1.5 pr-4 backdrop-blur-md hover:bg-white/10 transition-colors shadow-lg">
-          {user.user_metadata?.avatar_url ? <img src={user.user_metadata.avatar_url} className="w-8 h-8 rounded-full border border-white/20 object-cover" /> : <div className="w-8 h-8 rounded-full bg-violet-600 flex items-center justify-center text-sm font-bold text-white">U</div>}
-          <span className="text-xs font-medium text-zinc-200 max-w-[90px] truncate">{user.user_metadata?.full_name || user.email?.split('@')[0]}</span>
+      {/* 🌟 完美的左上角全局控制枢纽：并排放置头像与高复用下拉框 */}
+      <div className="fixed left-4 top-4 z-[90] flex items-center gap-2.5">
+        {/* 头像控制闸 */}
+        <button onClick={() => setIsSidebarOpen(true)} className="flex items-center justify-center rounded-full border border-white/15 bg-black/45 p-1.5 backdrop-blur-md hover:bg-white/10 transition-colors shadow-lg w-11 h-11">
+          {user.user_metadata?.avatar_url ? <img src={user.user_metadata.avatar_url} className="w-8 h-8 rounded-full border border-white/20 object-cover" /> : <div className="w-8 h-8 rounded-full bg-violet-600 flex items-center justify-center text-xs font-bold text-white">U</div>}
         </button>
+
+        {/* 智能数据驱动选择盘 */}
+        <SpreadSelector currentSpread="single" locale={locale} />
       </div>
 
       <LocaleSwitcher currentLocale={locale} onSetLocale={handleSetLocale} />
@@ -239,8 +241,7 @@ export default function Home() {
                 />
               </div>
 
-              {/* 4. 🌟 抽离后的高复用解牌展示框组件 */}
-              
+              {/* 4. 抽离后的高复用解牌展示框组件 */}
               <ReadingBox 
                 completion={completion}
                 isLoading={isLoading}
@@ -259,7 +260,14 @@ export default function Home() {
         </AnimatePresence>
       </main>
 
-      <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} user={user} locale={locale} onLogout={handleLogout} onOpenHistory={() => { fetchHistory(); setShowHistory(true); setIsSidebarOpen(false); }} />
+      {/* 侧边栏与模态框零件（在外部闭合布局里各司其职） */}
+      <Sidebar 
+        isOpen={isSidebarOpen} 
+        onClose={() => setIsSidebarOpen(false)} 
+        user={user} 
+        locale={locale} 
+        onLogout={handleLogout} 
+      />
       <HistoryModal isOpen={showHistory} onClose={() => setShowHistory(false)} isLoading={isLoadingHistory} logs={historyLogs} locale={locale} />
     </div>
   );
