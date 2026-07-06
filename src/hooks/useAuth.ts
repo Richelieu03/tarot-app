@@ -1,10 +1,10 @@
-// src/lib/useAuth.ts
+// src/hooks/useAuth.ts
 "use client";
 
 import { useEffect, useState } from "react";
-import type { User } from "@supabase/supabase-js";
-import { supabase } from "./supabase";
-import type { Locale } from "./locale";
+import type { User, Session, AuthChangeEvent } from "@supabase/supabase-js";
+import { supabase } from "../lib/supabase";
+import type { Locale } from "../lib/locale";
 
 export function useAuth(locale: Locale, setLocale: (l: Locale) => void) {
   const [user, setUser] = useState<User | null>(null);

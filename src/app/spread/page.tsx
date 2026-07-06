@@ -3,24 +3,25 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import { useCompletion } from "@ai-sdk/react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import "../tarot-spread.css"; 
 import { pickRandomTarotCard } from "../../lib/draw-random";
 import type { Locale } from "../../lib/locale";
 import { LOCALE_STORAGE_KEY, defaultLocale } from "../../lib/locale";
 import { getCardDisplayName } from "../../lib/tarot-labels";
-import { formatDailyRecap, isEnergyRecoveryBlock, t } from "../../lib/ui-i18n";
+import { isEnergyRecoveryBlock, t } from "../../lib/ui-i18n";
 import { supabase } from "../../lib/supabase";
-import { useAuth } from "../../lib/useAuth"; 
+import { useAuth } from "../../hooks/useAuth"; 
+// 🌟 引入刚封装的智能重试日志管家
+import { useDrawLogger } from "../../hooks/useDrawLogger"; 
 
-// 完美复用现有高复用零件库
 import AuthWall from "../../components/AuthWall";
 import Sidebar from "../../components/Sidebar";
 import TarotCard from "../../components/TarotCard"; 
 import LocaleSwitcher from "../../components/LocaleSwitcher"; 
 import TarotFan from "../../components/TarotFan"; 
 import ReadingBox from "../../components/ReadingBox";
-import SpreadSelector from "../../components/SpreadSelector"; // 🌟 引入新封装的高复用下拉组件
+import SpreadSelector from "../../components/SpreadSelector"; 
 
 type AppStage = "asking" | "selecting" | "reading";
 
@@ -48,6 +49,54 @@ export default function ThreeCardSpread() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const { user, appLoaded, handleLogout } = useAuth(locale, setLocale);
+  // 🌟 初始化持久化管家，自动绑定当前登录用户并启用失败重试
+  const { saveLog } = useDrawLogger(locale);
+
+  const slotsRef = useRef(slots);
+  const questionRef = useRef(userQuestion);
+  useEffect(() => {
+    slotsRef.current = slots;
+    questionRef.current = userQuestion;
+  }, [slots, userQuestion]);
+
+  const activeSlotIndex = slots.findIndex(s => s.cardName === null);
+  const isAllDrawn = activeSlotIndex === -1;
+
+  const { completion, complete, error, isLoading } = useCompletion({
+    api: "/api/tarot",
+    streamProtocol: "text",
+    // 🌟 一键交由智能管家处理报错，自带容错重试机制
+    onError: async (err) => {
+      await saveLog({
+        cardName: slotsRef.current[0]?.cardName || "愚者",
+        isReversed: slotsRef.current[0]?.isReversed || false,
+        question: `【圣三角阵报错】${questionRef.current}`,
+        aiReading: `[HIDDEN_ERROR] API Network Crash: ${err.message}`, 
+      });
+    },
+    // 🌟 成功解牌时自动尝试最多3次存入云端，抵抗后端基础设施波动
+    onFinish: async (_, result) => {
+      if (result.length <= 10 || result.includes("Error")) return;
+
+      const currentSlots = slotsRef.current;
+      const currentQ = questionRef.current.trim();
+
+      const spreadSummary = currentSlots
+        .map(s => {
+          const pos = t(locale, s.labelKey as any);
+          const rev = s.isReversed ? (locale === "zh" ? "逆" : "Rev") : (locale === "zh" ? "正" : "Up");
+          return `${pos}:${s.cardName}(${rev})`;
+        })
+        .join(" | ");
+
+      await saveLog({
+        cardName: currentSlots[0]?.cardName || "愚者",
+        isReversed: currentSlots[0]?.isReversed || false,
+        question: `【圣三角阵】${spreadSummary}${currentQ ? `\n问题：${currentQ}` : ""}`,
+        aiReading: result,
+      });
+    },
+  });
 
   useEffect(() => {
     document.documentElement.lang = locale === "zh" ? "zh-CN" : "en";
@@ -58,14 +107,6 @@ export default function ThreeCardSpread() {
     setLocale(newLocale);
     if (user) await supabase.auth.updateUser({ data: { locale: newLocale } });
   };
-
-  const activeSlotIndex = slots.findIndex(s => s.cardName === null);
-  const isAllDrawn = activeSlotIndex === -1;
-
-  const { completion, complete, error, isLoading } = useCompletion({
-    api: "/api/tarot",
-    streamProtocol: "text",
-  });
 
   const enterSpread = () => {
     if (!userQuestion.trim()) return;
@@ -101,14 +142,27 @@ export default function ThreeCardSpread() {
       isReversed: s.isReversed
     }));
 
-    const promptText = t(locale, "readSpreadPrompt" as any);
+    const cardsDescription = finalSlots.map(s => {
+      const position = t(locale, s.labelKey as any); 
+      const cardDisplayName = getCardDisplayName(s.cardName || "", locale); 
+      const orientation = s.isReversed ? t(locale, "reversed" as any) : t(locale, "upright" as any); 
+      return `- 【${position}】: ${cardDisplayName} (${orientation})`;
+    }).join("\n");
 
-    void complete(promptText, { 
+    const basePrompt = t(locale, "readSpreadPrompt" as any);
+    
+    const fullPrompt = locale === "zh" 
+      ? `${basePrompt}\n\n占卜问题：${userQuestion.trim()}\n\n圣三角牌阵抽卡结果如下：\n${cardsDescription}\n\n请结合以上时空脉络，为求问者提供深度、复合、连贯的整体神谕破译。`
+      : `${basePrompt}\n\nQuestion: ${userQuestion.trim()}\n\nThree-Card Spread Results:\n${cardsDescription}\n\nPlease provide a deep, coherent, and combined oracle interpretation based on this timeline.`;
+
+    void complete(fullPrompt, { 
       body: { 
         isSpread: true, 
         spreadData, 
         locale, 
-        question: userQuestion.trim() 
+        question: userQuestion.trim(),
+        cardName: finalSlots[0]?.cardName || "愚者",
+        isReversed: finalSlots[0]?.isReversed || false
       } 
     });
   };
@@ -138,12 +192,10 @@ export default function ThreeCardSpread() {
 
       {/* 左上角全局控制枢纽 */}
       <div className="fixed left-4 top-4 z-[90] flex items-center gap-2.5">
-        {/* 头像控制闸 */}
         <button onClick={() => setIsSidebarOpen(true)} className="flex items-center justify-center rounded-full border border-white/15 bg-black/45 p-1.5 backdrop-blur-md hover:bg-white/10 transition-colors shadow-lg w-11 h-11">
           {user.user_metadata?.avatar_url ? <img src={user.user_metadata.avatar_url} className="w-8 h-8 rounded-full border border-white/20 object-cover" /> : <div className="w-8 h-8 rounded-full bg-violet-600 flex items-center justify-center text-xs font-bold text-white">U</div>}
         </button>
 
-        {/* 🌟 优雅复用：一行代码直接空降组件，传入 "three" 告知当前身在圣三角 */}
         <SpreadSelector currentSpread="three" locale={locale} />
       </div>
 
@@ -155,23 +207,38 @@ export default function ThreeCardSpread() {
           {appStage === "asking" ? (
             <motion.div key="three-asking" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} className="flex min-h-[70vh] w-full max-w-lg flex-col items-center justify-center gap-10">
               <div className="space-y-3">
-                <h1 className="text-3xl font-light tracking-[0.2em] text-zinc-100 sm:text-4xl">圣三角神谕</h1>
-                <p className="text-sm leading-relaxed text-zinc-500">探寻【过去、现在、未来】的时空纠缠</p>
+                <h1 className="text-3xl font-light tracking-[0.2em] text-zinc-100 sm:text-4xl">
+                  {locale === "zh" ? "圣三角神谕" : "Holy Trinity Spread"}
+                </h1>
+                <p className="text-sm leading-relaxed text-zinc-500">
+                  {locale === "zh" ? "探寻【过去、现在、未来】的时空纠缠" : "Uncover the timeline entanglements of Past, Present, and Future"}
+                </p>
               </div>
               <div className="w-full space-y-8">
-                <textarea rows={4} value={userQuestion} onChange={(e) => setUserQuestion(e.target.value)} placeholder="请输入你心中渴望洞察的困惑或宿命（如：我的感情未来发展趋势）..." className="w-full resize-none bg-white/[0.04] p-3 text-zinc-100 shadow-[0_1px_0_0_rgba(167,139,250,0.35)] focus:outline-none focus:ring-0" />
+                <textarea 
+                  rows={4} 
+                  value={userQuestion} 
+                  onChange={(e) => setUserQuestion(e.target.value)} 
+                  placeholder={
+                    locale === "zh" 
+                      ? "请输入你心中渴望洞察的困惑或宿命（如：我的感情未来发展趋势）..." 
+                      : "Enter your question or destiny insight (e.g., How will my career evolve?)..."
+                  } 
+                  className="w-full resize-none bg-white/[0.04] p-3 text-zinc-100 shadow-[0_1px_0_0_rgba(167,139,250,0.35)] focus:outline-none focus:ring-0" 
+                />
                 <button type="button" onClick={enterSpread} className="group relative w-full overflow-hidden rounded-full border border-amber-400/25 bg-gradient-to-b from-violet-950/80 to-black py-4 text-amber-100 tracking-[0.35em]">
-                  开启三牌阵阵法
+                  {locale === "zh" ? "开启三牌阵阵法" : "ENTER THREE-CARD SPREAD"}
                 </button>
               </div>
             </motion.div>
           ) : (
             <motion.div key="three-flow" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} className="flex w-full flex-col items-center">
-              {/* 1. 顶部文本栏 */}
-              <h1 className="mt-12 text-2xl font-semibold tracking-tight text-zinc-100 sm:text-3xl">圣三角时空星盘</h1>
+              <h1 className="mt-12 text-2xl font-semibold tracking-tight text-zinc-100 sm:text-3xl">
+                {locale === "zh" ? "圣三角时空星盘" : "Three-Card Astral Matrix"}
+              </h1>
               <p className="mt-3 text-sm text-zinc-400">{subtitleMain}</p>
 
-              {/* 2. 全景三牌阵并行槽位展示区 */}
+              {/* 全景三牌阵槽位展示区 */}
               {(slots.some(s => s.cardName !== null) || !isSelecting) && (
                 <div className="my-8 flex flex-wrap items-start justify-center gap-6 sm:gap-10 w-full px-2">
                   {slots.map((slot, idx) => {
@@ -208,18 +275,23 @@ export default function ThreeCardSpread() {
                 </div>
               )}
 
-              {/* 3. 56张大折扇牌堆 */}
+              {/* 56张大折扇牌堆 */}
               <div className="w-full mt-4">
                 <TarotFan isOpen={isSelecting} isSelecting={isSelecting} clickedIndex={null} onSelectCard={handleSelectFromFan} />
               </div>
 
-              {/* 4. 专属综合命运演译文字框 */}
               <ReadingBox 
                 completion={completion}
                 isLoading={isLoading}
                 error={error}
                 isErrorState={!!error}
-                placeholderText={isSelecting ? "请在上方牌阵中依次挑满三张宿命卡牌..." : !slots.every(s => s.isFlipped) ? "请在上方依次点击翻开这三张揭晓的卡牌，以汇聚综合神谕..." : "🔮 星界星盘交织完毕，时空神谕正在降临..." }
+                placeholderText={
+                  isSelecting 
+                    ? (locale === "zh" ? "请在上方牌阵中依次挑满三张宿命卡牌..." : "Please select 3 destiny cards from the deck above...")
+                    : !slots.every(s => s.isFlipped) 
+                      ? (locale === "zh" ? "请在上方依次点击翻开这三张揭晓的卡牌，以汇聚综合神谕..." : "Click to flip the 3 revealed cards above to awaken the combined oracle...")
+                      : (locale === "zh" ? "🔮 星界星盘交织完毕，时空神谕正在降临..." : "🔮 Astral matrix aligned. Receiving temporal oracle...")
+                }
                 readingStatusLabel={readingStatusLabel}
                 locale={locale}
                 className={appStage === "reading" ? "-mt-4 mb-10 w-full max-w-3xl" : "mt-6 w-full max-w-3xl"} 
@@ -230,7 +302,13 @@ export default function ThreeCardSpread() {
         </AnimatePresence>
       </main>
 
-      <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} user={user} locale={locale} onLogout={handleLogout} onOpenHistory={() => {}} />
+      <Sidebar 
+        isOpen={isSidebarOpen} 
+        onClose={() => setIsSidebarOpen(false)} 
+        user={user} 
+        locale={locale} 
+        onLogout={handleLogout} 
+      />
     </div>
   );
 }
