@@ -71,7 +71,7 @@ export default function AuthWall({ locale, setLocale }: AuthWallProps) {
   };
 
   return (
-    <div className="w-full flex flex-col items-center px-2 text-center font-sans text-zinc-50">
+    <div className="w-full max-w-sm mx-auto flex flex-col items-center px-6 text-center font-sans text-zinc-50">
       <h2 className={`font-light text-zinc-100 ${locale === "zh" ? "text-3xl tracking-[0.25em]" : "text-2xl tracking-[0.15em]"}`}>
         {isSignUp ? (locale === "zh" ? "创立契约" : "Create Covenant") : (locale === "zh" ? "验证身份" : "Verify Identity")}
       </h2>
@@ -80,11 +80,11 @@ export default function AuthWall({ locale, setLocale }: AuthWallProps) {
         {isSignUp ? (locale === "zh" ? "输入您的邮箱与密码，开启命运书卷" : "Bind your email and password to begin.") : (locale === "zh" ? "欢迎归来，神秘学徒" : "Welcome back, seeker.")}
       </p>
 
-      <form onSubmit={handleEmailAuth} noValidate className="w-full space-y-3 mt-4">
+      <form onSubmit={handleEmailAuth} className="w-full space-y-4 mt-8">
         <input type="email" placeholder={locale === "zh" ? "输入您的邮箱..." : "Enter Email..."} value={email} onChange={(e) => setEmail(e.target.value)} className="w-full rounded-full border border-white/10 bg-white/[0.03] px-6 py-4 text-center text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-violet-500/50 focus:bg-white/[0.06] focus:outline-none focus:ring-1 focus:ring-violet-500/30 transition-all duration-300"/>
         <input type="password" placeholder={isSignUp ? (locale === "zh" ? "设定登录密码 (至少6位)..." : "Set Password (min 6 chars)...") : (locale === "zh" ? "输入密码..." : "Enter Password...")} value={password} onChange={(e) => setPassword(e.target.value)} className="w-full rounded-full border border-white/10 bg-white/[0.03] px-6 py-4 text-center text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-violet-500/50 focus:bg-white/[0.06] focus:outline-none focus:ring-1 focus:ring-violet-500/30 transition-all duration-300"/>
 
-        <button type="submit" disabled={isEmailLoading} className={`w-full rounded-full py-4 text-xs font-bold tracking-widest transition-all duration-300 active:scale-[0.98] disabled:opacity-50 ${isSignUp ? "bg-violet-600 text-white hover:bg-violet-500 shadow-[0_0_25px_rgba(139,92,246,0.35)]" : "bg-zinc-100 text-black hover:bg-zinc-200"}`}>
+        <button type="submit" disabled={isEmailLoading} className={`w-[220px] rounded-full py-4 text-xs font-bold tracking-widest transition-all duration-300 active:scale-[0.98] disabled:opacity-50 ${isSignUp ? "bg-violet-600 text-white hover:bg-violet-500 shadow-[0_0_25px_rgba(139,92,246,0.35)]" : "bg-zinc-100 text-black hover:bg-zinc-200"}`}>
           {isEmailLoading ? (locale === "zh" ? "仪式进行中..." : "PROCESSING...") : isSignUp ? (locale === "zh" ? "发送验证邮件" : "SEND VERIFICATION EMAIL") : (locale === "zh" ? "登录" : "LOGIN")}
         </button>
 
