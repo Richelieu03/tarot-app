@@ -141,25 +141,58 @@ export default function Home() {
   };
 
   const handleMainCardClick = () => {
-    if (flipped || isSelecting) return;
+  if (flipped || isSelecting) return;
 
+  setFlipped(true);
+  
+  const realCardName = localStorage.getItem("tarot_last_drawn_card") || currentCard;
+  const realIsReversed = localStorage.getItem("tarot_last_card_reversed") === "true";
+
+  if (!user) {
+    // 没登录：只翻开牌，App 状态设为 reading，但不触发 API
     setAppStage("reading");
-    setFlipped(true);
+    return; 
+  }
 
-    if (!user) return;
+  // 登录了：正常触发 API
+  setAppStage("reading");
+  void complete(t(locale, "readPrompt"), { 
+    body: { 
+      cardName: realCardName, 
+      isReversed: realIsReversed, 
+      locale, 
+      question: userQuestion.trim() 
+    } 
+  });
+};
+  useEffect(() => {
+  if (appLoaded && !flipped) {
+    const cachedCard = localStorage.getItem("tarot_last_drawn_card");
+    const cachedQuestion = localStorage.getItem(LS_USER_QUESTION);
 
-    const realCardName = localStorage.getItem("tarot_last_drawn_card") || currentCard;
-    const realIsReversed = localStorage.getItem("tarot_last_card_reversed") === "true";
-
-    void complete(t(locale, "readPrompt"), { 
-      body: { 
-        cardName: realCardName, 
-        isReversed: realIsReversed, 
-        locale, 
-        question: userQuestion.trim() 
-      } 
-    });
-  };
+    // 如果 localStorage 有缓存，且用户现在已经登录，立刻恢复流程
+    if (cachedCard && user) {
+      setCurrentCard(cachedCard);
+      setIsReversed(localStorage.getItem("tarot_last_card_reversed") === "true");
+      setUserQuestion(cachedQuestion || "");
+      
+      // 自动触发解牌流程
+      setFlipped(true);
+      setAppStage("reading");
+      setIsSelecting(false);
+      
+      // 立即调用 AI 接口
+      void complete(t(locale, "readPrompt"), { 
+        body: { 
+          cardName: cachedCard, 
+          isReversed: localStorage.getItem("tarot_last_card_reversed") === "true", 
+          locale, 
+          question: (cachedQuestion || "").trim() 
+        } 
+      });
+    }
+  }
+}, [appLoaded, user]);
 
   const subtitleMain = isSelecting ? t(locale, "subtitleSelecting") : t(locale, "subtitleAfterSelect");
   const readingStatusLabel = isLoading
