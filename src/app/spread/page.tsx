@@ -12,7 +12,7 @@ import { getCardDisplayName } from "../../lib/tarot-labels";
 import { isEnergyRecoveryBlock, t } from "../../lib/ui-i18n";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../hooks/useAuth"; 
-// 🌟 引入刚封装的智能重试日志管家
+import { getAvatarColor } from "../../lib/utils";
 import { useDrawLogger } from "../../hooks/useDrawLogger"; 
 
 import AuthWall from "../../components/AuthWall";
@@ -192,8 +192,22 @@ export default function ThreeCardSpread() {
 
       {/* 左上角全局控制枢纽 */}
       <div className="fixed left-4 top-4 z-[90] flex items-center gap-2.5">
-        <button onClick={() => setIsSidebarOpen(true)} className="flex items-center justify-center rounded-full border border-white/15 bg-black/45 p-1.5 backdrop-blur-md hover:bg-white/10 transition-colors shadow-lg w-11 h-11">
-          {user.user_metadata?.avatar_url ? <img src={user.user_metadata.avatar_url} className="w-8 h-8 rounded-full border border-white/20 object-cover" /> : <div className="w-8 h-8 rounded-full bg-violet-600 flex items-center justify-center text-xs font-bold text-white">U</div>}
+        
+        <button 
+            onClick={() => setIsSidebarOpen(true)} 
+            className="flex items-center justify-center rounded-full border border-white/15 bg-black/45 p-1.5 backdrop-blur-md hover:bg-white/10 transition-colors shadow-lg w-11 h-11 overflow-hidden" // 🌟 关键：加入 overflow-hidden
+            >
+            {user?.user_metadata?.avatar_url ? (
+              <img 
+                src={user.user_metadata.avatar_url} 
+                className="w-full h-full rounded-full object-cover" // 🌟 关键：改成 w-full h-full 自动撑满按钮容器
+                alt="Avatar"
+              />
+            ) : (
+              <div className={`w-full h-full rounded-full flex items-center justify-center text-xs font-bold text-zinc-400 ${getAvatarColor(user?.email)}`}>
+                {(user?.email || "🔮").charAt(0).toUpperCase()}
+              </div>
+          )}
         </button>
 
         <SpreadSelector currentSpread="three" locale={locale} />

@@ -21,6 +21,7 @@ import LocaleSwitcher from "../components/LocaleSwitcher";
 import TarotFan from "../components/TarotFan"; 
 import ReadingBox from "../components/ReadingBox";
 import SpreadSelector from "../components/SpreadSelector";
+import { getAvatarColor } from "../lib/utils";
 
 type AppStage = "asking" | "selecting" | "reading";
 const LS_USER_QUESTION = "tarot_user_question";
@@ -57,6 +58,8 @@ export default function Home() {
       await supabase.auth.updateUser({ data: { locale: newLocale } });
     }
   };
+
+  
 
   const fetchHistory = async () => {
     if (!user) return;
@@ -208,11 +211,20 @@ export default function Home() {
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(900px_520px_at_50%_25%,rgba(140,70,255,0.25),transparent_60%)]" />
       
       <div className="fixed left-4 top-4 z-[90] flex items-center gap-2.5">
-        <button onClick={() => setIsSidebarOpen(true)} className="flex items-center justify-center rounded-full border border-white/15 bg-black/45 p-1.5 backdrop-blur-md hover:bg-white/10 transition-colors shadow-lg w-11 h-11">
+        <button 
+          onClick={() => setIsSidebarOpen(true)} 
+          className="flex items-center justify-center rounded-full border border-white/15 bg-black/45 p-0 backdrop-blur-md hover:bg-white/10 transition-colors shadow-lg w-11 h-11 overflow-hidden"
+          >
           {user?.user_metadata?.avatar_url ? (
-            <img src={user.user_metadata.avatar_url} className="w-8 h-8 rounded-full border border-white/20 object-cover" />
+            <img 
+              src={user.user_metadata.avatar_url} 
+              className="w-full h-full object-cover" 
+              alt="Avatar"
+            />
           ) : (
-            <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center text-xs font-bold text-zinc-400">?</div>
+            <div className={`w-full h-full flex items-center justify-center text-xs font-bold text-zinc-300 ${getAvatarColor(user?.email || "")}`}>
+              {(user?.email || "🔮").charAt(0).toUpperCase()}
+            </div>
           )}
         </button>
         <SpreadSelector currentSpread="single" locale={locale} />

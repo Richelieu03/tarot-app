@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useState } from "react"; 
 import { supabase } from "../lib/supabase"; 
 import HistoryModal from "./HistoryModal"; 
+import { getAvatarColor } from "../lib/utils";
 
 interface SidebarProps {
   isOpen: boolean;
