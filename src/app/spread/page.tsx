@@ -300,11 +300,13 @@ export default function ThreeCardSpread() {
                 error={error}
                 isErrorState={!!error}
                 placeholderText={
-                  isSelecting 
-                    ? (locale === "zh" ? "请在上方牌阵中依次挑满三张宿命卡牌..." : "Please select 3 destiny cards from the deck above...")
-                    : !slots.every(s => s.isFlipped) 
-                      ? (locale === "zh" ? "请在上方依次点击翻开这三张揭晓的卡牌，以汇聚综合神谕..." : "Click to flip the 3 revealed cards above to awaken the combined oracle...")
-                      : (locale === "zh" ? "🔮 星界星盘交织完毕，时空神谕正在降临..." : "🔮 Astral matrix aligned. Receiving temporal oracle...")
+                  isLoading 
+                    ? "" //只要在 isLoading，文字框中间必须是空的！
+                    : isSelecting 
+                      ? (locale === "zh" ? "请在上方牌阵中依次挑满三张宿命卡牌..." : "Please select 3 destiny cards from the deck above...")
+                      : !slots.every(s => s.isFlipped) 
+                        ? (locale === "zh" ? "请在上方依次点击翻开这三张揭晓的卡牌，以汇聚综合神谕..." : "Click to flip the 3 revealed cards above to awaken the combined oracle...")
+                        : "" //翻牌瞬间直接归零，确保不跟 Channeling 抢位置
                 }
                 readingStatusLabel={readingStatusLabel}
                 locale={locale}
