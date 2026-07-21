@@ -15,7 +15,8 @@ interface SidebarProps {
   user: User | null; 
   locale: "zh" | "en";
   onLogout: () => Promise<void>;
-  onLoginClick?: () => void;
+  onLoginClick?: () => void; // 🌟 接收唤起登录框的函数
+  currentSpread?: "single" | "three"; // 🌟 接收当前牌阵类型，用于隔离历史记录
 }
 
 export default function Sidebar({
@@ -25,21 +26,31 @@ export default function Sidebar({
   locale,
   onLogout,
   onLoginClick,
+  currentSpread = "single", // 🌟 默认值为单牌阵
 }: SidebarProps) {
   const [showHistory, setShowHistory] = useState(false);
   const [historyLogs, setHistoryLogs] = useState<any[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
 
   const fetchHistory = async () => {
-    if (!user) return; // 🌟 安全阀：没有用户直接拦截
+    if (!user) return; // 安全阀：没有用户直接拦截
     setIsLoadingHistory(true);
     try {
-      const { data } = await supabase
+      let query = supabase
         .from('DrawLog')
         .select('*')
-        .eq('user_id', user.id) // 🌟 没登录时 user 是 null，这里必须被上面的 if (!user) 挡住
+        .eq('user_id', user.id)
         .not('ai_reading', 'ilike', '[HIDDEN_ERROR]%')
         .order('created_at', { ascending: false }); 
+
+      // 🌟 核心逻辑：按牌阵隔离历史记录
+      if (currentSpread === "single") {
+        query = query.not('question', 'ilike', '%【圣三角阵】%');
+      } else if (currentSpread === "three") {
+        query = query.ilike('question', '%【圣三角阵】%');
+      }
+
+      const { data } = await query;
       if (data) setHistoryLogs(data);
     } catch (err) {
       console.error(err);
@@ -49,7 +60,7 @@ export default function Sidebar({
   };
 
   const handleOpenHistoryClick = () => {
-    if (!user) return; // 🌟 没登录不给点历史记录
+    if (!user) return; 
     fetchHistory(); 
     setShowHistory(true); 
     onClose(); 
@@ -79,24 +90,37 @@ export default function Sidebar({
             >
               {/* 用户身份信息区块 */}
               <div className="p-8 pb-6 border-b border-white/5 flex flex-col items-center text-center">
-                {/* 🌟 核心修正一：加入 user?. 防御 null 异常 */}
-                {user?.user_metadata?.avatar_url ? (
-                  <img 
-                    src={user.user_metadata.avatar_url} 
-                    className="w-20 h-20 rounded-full border-2 border-violet-500/30 object-cover shadow-[0_0_20px_rgba(139,92,246,0.2)]" 
-                    alt="Avatar"
-                  />
-                ) : (
-                  <div className="w-20 h-20 rounded-full bg-zinc-900 border-2 border-zinc-800 flex items-center justify-center text-2xl font-bold text-zinc-500 shadow-[0_0_20px_rgba(139,92,246,0.1)]">
-                    {/* 🌟 核心修正二：防御 user 为空时的文本切片崩溃 */}
-                    {(user?.user_metadata?.full_name || user?.email || "🔮").charAt(0).toUpperCase()}
-                  </div>
-                )}
-                {/* 🌟 核心修正三：加入游荡灵魂默认文本 */}
+                
+                {/* 🌟 核心修改：用 button 包裹头像，实现未登录状态的点击唤起 */}
+                <button 
+                  onClick={() => {
+                    if (!user && onLoginClick) {
+                      onClose();        // 先收起侧边栏
+                      onLoginClick();   // 再呼出登录弹窗
+                    }
+                  }}
+                  className={`relative flex items-center justify-center rounded-full transition-transform ${
+                    !user ? "cursor-pointer hover:scale-105 active:scale-95" : "cursor-default"
+                  }`}
+                  disabled={!!user} // 已登录状态下禁用点击特效
+                >
+                  {user?.user_metadata?.avatar_url ? (
+                    <img 
+                      src={user.user_metadata.avatar_url} 
+                      className="w-20 h-20 rounded-full border-2 border-violet-500/30 object-cover shadow-[0_0_20px_rgba(139,92,246,0.2)]" 
+                      alt="Avatar"
+                    />
+                  ) : (
+                    // 🌟 核心修改：去掉了硬编码的灰色背景，使用 getAvatarColor 生成动态颜色
+                    <div className={`w-20 h-20 rounded-full border-2 flex items-center justify-center text-3xl font-bold text-zinc-100 shadow-[0_0_20px_rgba(139,92,246,0.1)] ${getAvatarColor(user?.email || "")}`}>
+                      {(user?.user_metadata?.full_name || user?.email || "🔮").charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                </button>
+
                 <h3 className="mt-4 text-lg font-medium text-white">
                   {user?.user_metadata?.full_name || user?.email?.split('@')[0] || (locale === "zh" ? "游荡的灵魂" : "Wandering Soul")}
                 </h3>
-                {/* 🌟 核心修正四：加入未绑定契约默认文本 */}
                 <p className="text-xs text-zinc-500 mt-1 truncate w-full">
                   {user?.email || (locale === "zh" ? "暂无星界契约" : "No Astral Bond")}
                 </p>
@@ -104,7 +128,6 @@ export default function Sidebar({
 
               {/* 功能导航菜单 */}
               <div className="flex-1 py-6 px-4 space-y-2 overflow-y-auto">
-                {/* 历史记录按钮：未登录用户直接置灰，不给点 */}
                 <button 
                   onClick={handleOpenHistoryClick} 
                   disabled={!user}
@@ -128,11 +151,10 @@ export default function Sidebar({
                 </Link>
               </div>
 
-              {/* 底部登出退场区：只有真实登录的用户才显示登出 */}
+              {/* 底部登出退场区 */}
               {user && (
                 <div className="p-4 border-t border-white/5">
                   <button 
-                    
                     onClick={async () => {
                       await onLogout();
                       window.location.reload(); 
