@@ -12,9 +12,10 @@ import { getAvatarColor } from "../lib/utils";
 interface SidebarProps {
   isOpen: boolean;
   onClose: () => void;
-  user: User | null; // 🌟 这里已经对齐了！
+  user: User | null; 
   locale: "zh" | "en";
   onLogout: () => Promise<void>;
+  onLoginClick?: () => void;
 }
 
 export default function Sidebar({
@@ -23,6 +24,7 @@ export default function Sidebar({
   user,
   locale,
   onLogout,
+  onLoginClick,
 }: SidebarProps) {
   const [showHistory, setShowHistory] = useState(false);
   const [historyLogs, setHistoryLogs] = useState<any[]>([]);
@@ -130,7 +132,11 @@ export default function Sidebar({
               {user && (
                 <div className="p-4 border-t border-white/5">
                   <button 
-                    onClick={onLogout} 
+                    
+                    onClick={async () => {
+                      await onLogout();
+                      window.location.reload(); 
+                    }}
                     className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm text-red-400/80 hover:text-red-400 hover:bg-red-400/10 rounded-2xl transition-colors"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

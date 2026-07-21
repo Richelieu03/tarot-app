@@ -339,6 +339,7 @@ export default function Home() {
         user={user} 
         locale={locale} 
         onLogout={handleLogout} 
+        onLoginClick={() => setShowAuthOverlay(true)}
       />
       <HistoryModal isOpen={showHistory} onClose={() => setShowHistory(false)} isLoading={isLoadingHistory} logs={historyLogs} locale={locale} />
 
