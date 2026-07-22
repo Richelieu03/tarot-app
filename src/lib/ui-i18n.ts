@@ -39,7 +39,7 @@ const ui = {
   zh: {
     title: "神谕之门",
     subtitleSelecting: "请从下方牌阵中，凭直觉抽取一张牌",
-    subtitleAfterSelect: "命运的齿轮已经转动",
+    subtitleAfterSelect: "点击牌背，揭晓指引",
     upright: "正位",
     reversed: "逆位",
     oracleBadge: "TAROT ORACLE",

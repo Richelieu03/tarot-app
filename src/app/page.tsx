@@ -287,18 +287,14 @@ export default function Home() {
                   isLoading={isLoading}
                   error={error}
                   isErrorState={!!error || completion.includes("[HIDDEN_ERROR]") || completion.includes("【魔法阵崩溃】") || completion.includes("[Ritual interrupted]") || completion.includes("能量正在恢复中")}
-                  placeholderText={
-                    !user
-                      ? (isSelecting 
-                          ? (locale === "zh" ? "请屏气凝神，在上方大折扇牌堆中挑出一张具有宿命感应的卡牌..." : "Please focus and select a destiny card from the deck above...")
-                          : (!flipped 
-                              ? (locale === "zh" ? "命运卡牌已锁定！请点击上方卡牌将其翻转..." : "Destiny card locked! Click the card above to flip...")
-                              : (locale === "zh" ? "天命之牌已然显现，点击下方按钮建立星界连结，即可获得专属牌面解读..." : "Your destiny card has revealed. Connect to link the full oracle details...")))
-                      : (isSelecting 
-                          ? t(locale, "placeholderSelecting") 
-                          : !flipped 
-                            ? t(locale, "placeholderAfterPick") 
-                            : t(locale, "placeholderThinking"))
+                 placeholderText={
+                    isLoading 
+                      ? "" 
+                      : isSelecting 
+                        ? (locale === "zh" ? "请屏气凝神，点击上方大折扇牌堆，抽取属于你的命运卡牌..." : "Please focus and click the deck above to draw your destiny card...")
+                        : !flipped 
+                          ? (locale === "zh" ? "命运卡牌已就位！请点击上方牌面将其翻转，揭晓最终神谕..." : "Destiny card locked! Click the card above to flip and reveal the oracle...")
+                          : "" 
                   }
                   readingStatusLabel={readingStatusLabel}
                   locale={locale}
