@@ -40,7 +40,19 @@ const INITIAL_SLOTS: CardSlot[] = [
 ];
 
 export default function ThreeCardSpread() {
-  const [locale, setLocale] = useState<Locale>(defaultLocale);
+  const [locale, setLocale] = useState<Locale>(() => {
+      if (typeof window !== "undefined") {
+        return (localStorage.getItem(LOCALE_STORAGE_KEY) as Locale) || defaultLocale;
+      }
+      return defaultLocale;
+    });
+
+    useEffect(() => {
+      document.documentElement.lang = locale === "zh" ? "zh-CN" : "en";
+      if (typeof window !== "undefined") {
+        localStorage.setItem(LOCALE_STORAGE_KEY, locale);
+      }
+  }, [locale]);
   const [appStage, setAppStage] = useState<AppStage>("asking");
   const [userQuestion, setUserQuestion] = useState("");
   const [isSelecting, setIsSelecting] = useState(true);
