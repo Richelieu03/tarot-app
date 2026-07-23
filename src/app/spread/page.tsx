@@ -49,7 +49,6 @@ export default function ThreeCardSpread() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const { user, appLoaded, handleLogout } = useAuth(locale, setLocale);
-  // 🌟 初始化持久化管家，自动绑定当前登录用户并启用失败重试
   const { saveLog } = useDrawLogger(locale);
 
   const slotsRef = useRef(slots);
@@ -65,7 +64,6 @@ export default function ThreeCardSpread() {
   const { completion, complete, error, isLoading } = useCompletion({
     api: "/api/tarot",
     streamProtocol: "text",
-    // 🌟 一键交由智能管家处理报错，自带容错重试机制
     onError: async (err) => {
       await saveLog({
         cardName: slotsRef.current[0]?.cardName || "愚者",
@@ -74,7 +72,6 @@ export default function ThreeCardSpread() {
         aiReading: `[HIDDEN_ERROR] API Network Crash: ${err.message}`, 
       });
     },
-    // 🌟 成功解牌时自动尝试最多3次存入云端，抵抗后端基础设施波动
     onFinish: async (_, result) => {
       if (result.length <= 10 || result.includes("Error")) return;
 
@@ -178,10 +175,18 @@ export default function ThreeCardSpread() {
       : t(locale, "readingWait" as any);
 
   if (!appLoaded) return <div className="min-h-screen bg-[#05030a]" />;
+  
+  // 🌟 未登录直接由开箱即用的 AuthWall 完美接管（自带毛玻璃与点击 X 返回主页）
   if (!user) {
     return (
-      <div className="min-h-screen w-full bg-[#05030a] text-zinc-50 flex items-center justify-center overflow-y-auto">
-        <AuthWall locale={locale} setLocale={setLocale} />
+      <div className="min-h-screen w-full bg-[#05030a]">
+        <AuthWall 
+          locale={locale} 
+          setLocale={setLocale} 
+          isOpen={true} 
+          onClose={() => { window.location.href = "/"; }} 
+          subtitle={locale === "zh" ? "—— 圣三角阵法需星界连结 ——" : "—— ASTRAL BOND REQUIRED ——"}
+        />
       </div>
     );
   }
@@ -192,19 +197,18 @@ export default function ThreeCardSpread() {
 
       {/* 左上角全局控制枢纽 */}
       <div className="fixed left-4 top-4 z-[90] flex items-center gap-2.5">
-        
         <button 
             onClick={() => setIsSidebarOpen(true)} 
-            className="flex items-center justify-center rounded-full border border-white/15 bg-black/45 p-1.5 backdrop-blur-md hover:bg-white/10 transition-colors shadow-lg w-11 h-11 overflow-hidden" // 🌟 关键：加入 overflow-hidden
+            className="flex items-center justify-center rounded-full border border-white/15 bg-black/45 p-1.5 backdrop-blur-md hover:bg-white/10 transition-colors shadow-lg w-11 h-11 overflow-hidden"
             >
             {user?.user_metadata?.avatar_url ? (
               <img 
                 src={user.user_metadata.avatar_url} 
-                className="w-full h-full rounded-full object-cover" // 🌟 关键：改成 w-full h-full 自动撑满按钮容器
+                className="w-full h-full rounded-full object-cover" 
                 alt="Avatar"
               />
             ) : (
-              <div className={`w-full h-full rounded-full flex items-center justify-center text-xs font-bold text-zinc-400 ${getAvatarColor(user?.email)}`}>
+              <div className={`w-full h-full rounded-full flex items-center justify-center text-xs font-bold text-zinc-400 ${getAvatarColor(user?.email || "")}`}>
                 {(user?.email || "🔮").charAt(0).toUpperCase()}
               </div>
           )}
@@ -301,12 +305,12 @@ export default function ThreeCardSpread() {
                 isErrorState={!!error}
                 placeholderText={
                   isLoading 
-                    ? "" //只要在 isLoading，文字框中间必须是空的！
+                    ? "" 
                     : isSelecting 
                       ? (locale === "zh" ? "请在上方牌阵中依次挑满三张宿命卡牌..." : "Please select 3 destiny cards from the deck above...")
                       : !slots.every(s => s.isFlipped) 
                         ? (locale === "zh" ? "请在上方依次点击翻开这三张揭晓的卡牌，以汇聚综合神谕..." : "Click to flip the 3 revealed cards above to awaken the combined oracle...")
-                        : "" //翻牌瞬间直接归零，确保不跟 Channeling 抢位置
+                        : "" 
                 }
                 readingStatusLabel={readingStatusLabel}
                 locale={locale}
@@ -317,7 +321,6 @@ export default function ThreeCardSpread() {
           )}
         </AnimatePresence>
       </main>
-
       <Sidebar 
         isOpen={isSidebarOpen} 
         onClose={() => setIsSidebarOpen(false)} 
