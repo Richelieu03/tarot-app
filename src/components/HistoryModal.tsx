@@ -5,14 +5,28 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { getCardDisplayName } from "../lib/tarot-labels";
 
-// 复用历史记录的数据结构
+// 🌟 1. 定义多牌阵里单张牌的数据结构
+interface CardItem {
+  name: string;
+  is_reversed?: boolean;
+  isReversed?: boolean; // 兼容可能存在的前端命名
+  position_label?: string; // 例如："过去" | "现在" | "未来"
+}
+
+// 🌟 2. 扩展历史记录日志接口，兼容新老字段
 interface DrawLog {
   id: number;
   created_at: string;
-  card_name: string;
-  is_reversed: boolean;
   question: string;
   ai_reading: string;
+  
+  // 兼容老数据（单牌阵）
+  card_name?: string;
+  is_reversed?: boolean;
+  
+  // 兼容新数据（你的数据库中已存在的字段）
+  spread_type?: "single" | "trinity" | string;
+  spread_data?: CardItem[] | null;
 }
 
 interface HistoryModalProps {
@@ -70,6 +84,13 @@ export default function HistoryModal({ isOpen, onClose, isLoading, logs, locale 
             ) : (
               logs.map((log) => {
                 const isExpanded = expandedLogId === log.id;
+                
+                // 🌟 判断是否为多牌阵
+                const isMultiCard = Array.isArray(log.spread_data) && log.spread_data.length > 0;
+                const spreadBadgeLabel = 
+                  log.spread_type === "trinity" ? (locale === "zh" ? "圣三角" : "Trinity") : 
+                  log.spread_type === "celtic" ? (locale === "zh" ? "凯尔特" : "Celtic Cross") : null;
+
                 return (
                   <motion.div 
                     layout="position" 
@@ -77,23 +98,69 @@ export default function HistoryModal({ isOpen, onClose, isLoading, logs, locale 
                     onClick={() => setExpandedLogId(isExpanded ? null : log.id)} 
                     className="bg-white/[0.03] border border-white/10 rounded-2xl p-5 md:p-6 shadow-xl flex flex-col gap-4 cursor-pointer transition-colors hover:bg-white/[0.06]"
                   >
+                    {/* 卡片头部说明与展开箭头 */}
                     <div className={`flex justify-between items-start ${isExpanded ? "border-b border-white/5 pb-4" : ""}`}>
-                      <div>
-                        <div className="text-xs text-zinc-500 mb-1 font-mono tracking-wider">{formatDate(log.created_at)}</div>
-                        <div className="text-lg font-bold text-violet-300 drop-shadow-md">
-                          {locale === "en" ? getCardDisplayName(log.card_name, "en") : log.card_name} 
-                          <span className="text-xs ml-2 font-normal text-zinc-400 border border-white/10 px-2 py-0.5 rounded-full bg-black/30">
-                            {log.is_reversed ? (locale === "zh" ? "逆位" : "Reversed") : (locale === "zh" ? "正位" : "Upright")}
-                          </span>
+                      <div className="w-full mr-4">
+                        <div className="flex items-center justify-between text-xs text-zinc-500 mb-2">
+                          <span className="font-mono tracking-wider">{formatDate(log.created_at)}</span>
+                          
+                          {/* 🌟 牌阵类型标签：多牌阵才显示独立 Badge */}
+                          {isMultiCard && spreadBadgeLabel && (
+                            <span className="rounded-full px-2.5 py-0.5 text-[10px] tracking-widest font-medium border border-amber-400/30 bg-amber-400/10 text-amber-300">
+                              {spreadBadgeLabel}
+                            </span>
+                          )}
                         </div>
+
+                        {/* 🌟 差异化牌面展示核心逻辑 */}
+                        {isMultiCard ? (
+                          /* 🎴 多牌阵渲染：紧凑的 3 格 Grid 布局 */
+                          <div className="grid grid-cols-3 gap-2 mt-2">
+                            {log.spread_data!.map((card, idx) => {
+                              const reversed = card.is_reversed !== undefined ? card.is_reversed : card.isReversed;
+                              const displayName = locale === "en" ? getCardDisplayName(card.name, "en") : card.name;
+                              return (
+                                <div 
+                                  key={idx} 
+                                  className="flex flex-col items-center justify-center rounded-xl border border-white/5 bg-black/40 p-2.5 text-center shadow-inner"
+                                >
+                                  {card.position_label && (
+                                    <span className="mb-1 text-[10px] text-amber-400/70 tracking-widest">
+                                      {card.position_label}
+                                    </span>
+                                  )}
+                                  <span className="text-xs font-semibold text-zinc-100 line-clamp-1">
+                                    {displayName}
+                                  </span>
+                                  <span className={`mt-1 text-[10px] px-1.5 py-0.5 rounded-full border border-white/5 ${
+                                    reversed ? "bg-amber-500/10 text-amber-300" : "bg-violet-500/10 text-violet-300"
+                                  }`}>
+                                    {reversed ? (locale === "zh" ? "逆位" : "Rev") : (locale === "zh" ? "正位" : "Upr")}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          /* 🃏 单牌阵渲染：原封不动保留你最初的代码 */
+                          <div className="text-lg font-bold text-violet-300 drop-shadow-md">
+                            {locale === "en" && log.card_name ? getCardDisplayName(log.card_name, "en") : (log.card_name || "未知卡牌")} 
+                            <span className="text-xs ml-2 font-normal text-zinc-400 border border-white/10 px-2 py-0.5 rounded-full bg-black/30">
+                              {log.is_reversed ? (locale === "zh" ? "逆位" : "Reversed") : (locale === "zh" ? "正位" : "Upright")}
+                            </span>
+                          </div>
+                        )}
                       </div>
-                      <motion.div animate={{ rotate: isExpanded ? 180 : 0 }} className="text-zinc-500 mt-1">
+
+                      {/* 展开箭头的旋转动画 */}
+                      <motion.div animate={{ rotate: isExpanded ? 180 : 0 }} className="text-zinc-500 mt-1 shrink-0">
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                         </svg>
                       </motion.div>
                     </div>
 
+                    {/* 所测之惑（保持原样） */}
                     {log.question && (
                       <div className="bg-black/40 rounded-xl p-4 border border-white/5">
                         <div className="text-[10px] text-zinc-500 mb-1">{locale === "zh" ? "所测之惑" : "Question"}</div>
@@ -103,6 +170,7 @@ export default function HistoryModal({ isOpen, onClose, isLoading, logs, locale 
                       </div>
                     )}
 
+                    {/* 详细解牌结果展开框（保持原样） */}
                     <AnimatePresence>
                       {isExpanded && (
                         <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">

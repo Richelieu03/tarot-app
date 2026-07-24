@@ -4,7 +4,7 @@ const ui = {
   en: {
     title: "The Oracle Gate",
     subtitleSelecting: "Draw one card from the spread below—follow your intuition.",
-    subtitleAfterSelect: "The wheel of fate is turning.",
+    subtitleAfterSelect: "The wheel of fate is turning, click to reveal.",
     upright: "Upright",
     reversed: "Reversed",
     oracleBadge: "TAROT ORACLE",
