@@ -33,43 +33,26 @@ export default function Sidebar({
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
 
   const fetchHistory = async () => {
-    if (!user) return; // 安全阀：没有用户直接拦截
+    if (!user) return;
     setIsLoadingHistory(true);
-    
     try {
-      let query = supabase
+      // 🌟 直接查询该账号下所有的记录，不再用 '%【圣三角阵】%' 去剔除数据！
+      const { data, error } = await supabase
         .from('DrawLog')
         .select('*')
         .eq('user_id', user.id)
         .not('ai_reading', 'ilike', '[HIDDEN_ERROR]%')
         .order('created_at', { ascending: false }); 
 
-      // 按牌阵隔离历史记录
-      if (currentSpread === "single") {
-        query = query.not('question', 'ilike', '%【圣三角阵】%');
-      } else if (currentSpread === "three") {
-        query = query.ilike('question', '%【圣三角阵】%');
-      }
-
-      // 🌟 1. 明确把 error 也一起解构出来
-      const { data, error } = await query;
-
-      // 🌟 2. 遇到报错直接打印在浏览器控制台，并弹窗提示，绝不静默！
       if (error) {
-        console.error("❌ 读取历史记录数据库失败:", error.message, error);
-        alert(`读取历史记录异常: ${error.message}`);
-        setHistoryLogs([]); // 清空列表，保证不会卡死
+        console.error("读取报错:", error);
         return;
       }
 
-      // 🌟 3. 确保不论是否有数据，都将数组赋给 setHistoryLogs (即使是空数组)
       setHistoryLogs(data || []);
-    } catch (err: any) {
-      console.error("Frontend Error:", err);
-      alert(`network error: ${err?.message || "Unknown error"}`);
-      setHistoryLogs([]);
+    } catch (err) {
+      console.error(err);
     } finally {
-      // 🌟 4. 彻底确保加载转圈停止
       setIsLoadingHistory(false); 
     }
   };
