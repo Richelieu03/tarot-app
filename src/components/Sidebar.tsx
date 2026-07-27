@@ -15,8 +15,8 @@ interface SidebarProps {
   user: User | null; 
   locale: "zh" | "en";
   onLogout: () => Promise<void>;
-  onLoginClick?: () => void; // 🌟 接收唤起登录框的函数
-  currentSpread?: "single" | "three"; // 🌟 接收当前牌阵类型，用于隔离历史记录
+  onLoginClick?: () => void; 
+  currentSpread?: "single" | "three"; 
 }
 
 export default function Sidebar({
@@ -26,7 +26,7 @@ export default function Sidebar({
   locale,
   onLogout,
   onLoginClick,
-  currentSpread = "single", // 🌟 默认值为单牌阵
+  currentSpread = "single", 
 }: SidebarProps) {
   const [showHistory, setShowHistory] = useState(false);
   const [historyLogs, setHistoryLogs] = useState<any[]>([]);
@@ -36,7 +36,7 @@ export default function Sidebar({
     if (!user) return;
     setIsLoadingHistory(true);
     try {
-      // 🌟 直接查询该账号下所有的记录，不再用 '%【圣三角阵】%' 去剔除数据！
+      // show current user records, filter out those with ai_reading starting with "[HIDDEN_ERROR]", and order by created_at descending
       const { data, error } = await supabase
         .from('DrawLog')
         .select('*')
@@ -69,7 +69,7 @@ export default function Sidebar({
       <AnimatePresence>
         {isOpen && (
           <>
-            {/* 背景遮罩蒙层 */}
+            {/* background */}
             <motion.div 
               initial={{ opacity: 0 }} 
               animate={{ opacity: 1 }} 
@@ -78,7 +78,7 @@ export default function Sidebar({
               className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm" 
             />
             
-            {/* 侧边栏抽屉本体 */}
+            {/* sidebar */}
             <motion.div 
               initial={{ x: "-100%" }} 
               animate={{ x: 0 }} 
@@ -86,21 +86,21 @@ export default function Sidebar({
               transition={{ type: "spring", bounce: 0, duration: 0.4 }} 
               className="fixed left-0 top-0 bottom-0 z-[101] w-72 max-w-[80vw] bg-[#0a0612] border-r border-white/15 flex flex-col shadow-2xl"
             >
-              {/* 用户身份信息区块 */}
+              {/* user profile */}
               <div className="p-8 pb-6 border-b border-white/5 flex flex-col items-center text-center">
                 
-                {/* 🌟 核心修改：用 button 包裹头像，实现未登录状态的点击唤起 */}
+                {/* 🌟 profile button */}
                 <button 
                   onClick={() => {
                     if (!user && onLoginClick) {
-                      onClose();        // 先收起侧边栏
-                      onLoginClick();   // 再呼出登录弹窗
+                      onClose();        // sidebar close
+                      onLoginClick();   // login modal open
                     }
                   }}
                   className={`relative flex items-center justify-center rounded-full transition-transform ${
                     !user ? "cursor-pointer hover:scale-105 active:scale-95" : "cursor-default"
                   }`}
-                  disabled={!!user} // 已登录状态下禁用点击特效
+                  disabled={!!user} //disable while user is logged in
                 >
                   {user?.user_metadata?.avatar_url ? (
                     <img 
@@ -109,7 +109,7 @@ export default function Sidebar({
                       alt="Avatar"
                     />
                   ) : (
-                    // 🌟 核心修改：去掉了硬编码的灰色背景，使用 getAvatarColor 生成动态颜色
+                    
                     <div className={`w-20 h-20 rounded-full border-2 flex items-center justify-center text-3xl font-bold text-zinc-100 shadow-[0_0_20px_rgba(139,92,246,0.1)] ${getAvatarColor(user?.email || "")}`}>
                       {(user?.user_metadata?.full_name || user?.email || "🔮").charAt(0).toUpperCase()}
                     </div>
@@ -124,7 +124,7 @@ export default function Sidebar({
                 </p>
               </div>
 
-              {/* 功能导航菜单 */}
+              {/* function */}
               <div className="flex-1 py-6 px-4 space-y-2 overflow-y-auto">
                 <button 
                   onClick={handleOpenHistoryClick} 
@@ -149,7 +149,7 @@ export default function Sidebar({
                 </Link>
               </div>
 
-              {/* 底部登出退场区 */}
+              {/* logout */}
               {user && (
                 <div className="p-4 border-t border-white/5">
                   <button 
