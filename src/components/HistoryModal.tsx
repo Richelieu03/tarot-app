@@ -112,7 +112,7 @@ export default function HistoryModal({ isOpen, onClose, isLoading, logs, locale 
                           )}
                         </div>
 
-                        {/* 🌟 差异化牌面展示核心逻辑 */}
+                        {/* core card display logic */}
                         {isMultiCard ? (
                           /* 🎴 多牌阵渲染：紧凑的 3 格 Grid 布局 */
                           <div className="grid grid-cols-3 gap-2 mt-2">
