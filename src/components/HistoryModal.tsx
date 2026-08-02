@@ -20,7 +20,7 @@ interface DrawLog {
   question: string;
   ai_reading: string;
   
-  // 兼容老数据（单牌阵）
+  // 单牌阵数据
   card_name?: string;
   is_reversed?: boolean;
   
@@ -114,7 +114,7 @@ export default function HistoryModal({ isOpen, onClose, isLoading, logs, locale 
 
                         {/* core card display logic */}
                         {isMultiCard ? (
-                          /* 🎴 多牌阵渲染：紧凑的 3 格 Grid 布局 */
+                          /* 多牌阵渲染 */
                           <div className="grid grid-cols-3 gap-2 mt-2">
                             {log.spread_data!.map((card, idx) => {
                               const reversed = card.is_reversed !== undefined ? card.is_reversed : card.isReversed;
@@ -142,7 +142,7 @@ export default function HistoryModal({ isOpen, onClose, isLoading, logs, locale 
                             })}
                           </div>
                         ) : (
-                          /* 🃏 单牌阵渲染：原封不动保留你最初的代码 */
+                          /* 单牌阵渲染 */
                           <div className="text-lg font-bold text-violet-300 drop-shadow-md">
                             {locale === "en" && log.card_name ? getCardDisplayName(log.card_name, "en") : (log.card_name || "未知卡牌")} 
                             <span className="text-xs ml-2 font-normal text-zinc-400 border border-white/10 px-2 py-0.5 rounded-full bg-black/30">
@@ -160,7 +160,7 @@ export default function HistoryModal({ isOpen, onClose, isLoading, logs, locale 
                       </motion.div>
                     </div>
 
-                    {/* 所测之惑（保持原样） */}
+                    {/* 所测之惑 */}
                     {log.question && (
                       <div className="bg-black/40 rounded-xl p-4 border border-white/5">
                         <div className="text-[10px] text-zinc-500 mb-1">{locale === "zh" ? "所测之惑" : "Question"}</div>
@@ -170,7 +170,7 @@ export default function HistoryModal({ isOpen, onClose, isLoading, logs, locale 
                       </div>
                     )}
 
-                    {/* 详细解牌结果展开框（保持原样） */}
+                    {/* 详细解牌结果展开框 */}
                     <AnimatePresence>
                       {isExpanded && (
                         <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
