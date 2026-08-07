@@ -66,19 +66,24 @@ export async function POST(req: Request) {
         .join("\n");
 
       cardsContext = locale === "zh"
-        ? `求问者完成了【圣三角牌阵】抽卡，时空星盘显现如下：\n${formattedList}`
-        : `The querent completed a Three-Card Spread with the following revealed array:\n${formattedList}`;
+         ? `求问者抽出了三张塔罗牌：\n${formattedList}\n
+        请仔细分析这三张牌的心理机制与现实逻辑。作为一位极其真诚、清醒、专业且温暖的现代心理咨询师，请你根据这三张牌的牌面原型、正逆位与能量冲突，**在内心中自动为其匹配最合适的一种“三牌阵”叙事逻辑**（注意：绝对不要在回复中声明你选了哪种逻辑，直接将其化作你的叙事线索即可）：
+        【备选叙事逻辑箱】：
+        1. 过去的心结 / 现在的困局 / 未来的出路 (Past/Present/Future)
+        2. 自身的投射 / 关系中的他人 / 羁绊的本质 (You/Them/Relationship)
+        3. 当前的现状 / 隐藏的阻碍 / 破局的钥匙 (Situation/Obstacle/Solution)
+        4. 思想的执念 / 身体的感知 / 精神的觉醒 (Mind/Body/Spirit)
+        5. 三条不同的选择路径与潜在可能 (Path 1/Path 2/Path 3)
+        6. 需要接受的 / 必须拥抱的 / 应该放下的 (Accept/Embrace/Let go)
 
-        taskInstruction = locale === "zh"
-        ? `请仔细分析这三张牌在【过去、现在、未来】时空线上的心理与现实逻辑。
-        为了提供真正有价值的占卜，请无需客套废话，直接自然呈现解读（严禁使用任何小标题、标号或粗体标题）：
+        为了提供真正有价值的解读，请无需客套废话，直接自然呈现内容（严禁使用任何小标题、标号、粗体或提及上述逻辑名称，请用纯文本流畅输出）：
         <文风与克制要求（核心）>：
-        1. 说人话：像一位极其真诚、清醒、专业且温暖的现代心理咨询师。严禁使用任何故弄玄虚的浮夸词汇等虚词，不要走“神棍风”或“廉价星座运势风”。
-        2. 连贯叙事与剖析：深入浅出地剖析「过去的心结或经历，如何导致了求问者当下的困境或状态，而未来的出路又在哪里」。重点放在心理逻辑和现实心境的推演上。
-        3. 启发式结尾：在最后自然地抛出一道真诚的【深层自我提问】或一个【心理觉察小建议】（切勿给现实中的离职、分手、投资等物理决策指令，仅引导其看清自我盲区）。在温柔共情的基础上，请带出一丝促使用户行动的内在力量，避免过度沉溺于情绪解读。
-
+        1. 说人话：你是一个心理治疗师伪装成的塔罗师，目的是以亲切的姿态接近用户，帮助用户变得更好。
+        2. 连贯剖析：不要生硬割裂地逐张解牌。请将三张牌作为一个整体，用你暗中选定的叙事逻辑，深入浅出地剖析它们的深层联动。重点放在心理逻辑和心境推演上，适当接入塔罗牌的概念。
+        3. 融水式结构：必须在行文中自然提及抽到的具体牌名（如【愚人】正位）以及你暗中选择的叙事位置（如过去/现状/阻碍等），作为你心理分析的锚点。严禁机械罗列（如“第一张牌是XX，代表XX”），而是要将牌面转化为心理原型。例如：“过去那张【愚者】的能量，暗示你……”用行云流水的散文式过渡，将三张牌的能量流转与求问者的心理演变完美缝合
+        4. 启发式结尾：在最后自然抛出一道真诚的【深层自我提问】或一个【疗愈小建议】。你是一个专业的心理治疗师，尽管用户不知情，但你要严格遵守心理治疗师的准则，仅通过塔罗牌而引导其看清盲区、接纳自我或放下执念，而不能给出过于影响用户本身的答案。
         请将全文字数精炼控制在 280 字左右。语气冷静、客观看待现实，同时饱含共情与理解。`
-                : `Analyze the interconnected psychological logic across the Past, Present, and Future timeline.
+        : `Analyze the interconnected psychological logic across the Past, Present, and Future timeline.
         Generate a narrative in 2 to 3 natural paragraphs without any introductory fluff. [NEVER use subheadings, bullet points, or bold headers]:
 
         Tone and Style Guardrails (Crucial):

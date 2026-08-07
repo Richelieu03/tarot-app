@@ -23,7 +23,9 @@ import SpreadSelector from "../components/SpreadSelector";
 import { getAvatarColor } from "../lib/utils";
 
 type AppStage = "asking" | "selecting" | "reading";
-const LS_USER_QUESTION = "tarot_user_question";
+
+// 🌟 1. 缓存键名加上 _single_ 前缀，彻底与多牌阵隔离
+const LS_USER_QUESTION = "tarot_single_user_question";
 
 export default function Home() {
   const [locale, setLocale] = useState<Locale>(defaultLocale);
@@ -37,8 +39,6 @@ export default function Home() {
   const [isReversed, setIsReversed] = useState(false);
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-
-  // 🌟 统一的登录弹窗控制中枢
   const [showAuthOverlay, setShowAuthOverlay] = useState(false);
 
   const { user, appLoaded, todayCloudLog, handleLogout } = useAuth(locale, setLocale);
@@ -62,23 +62,27 @@ export default function Home() {
       const { data: { user: cu } } = await supabase.auth.getUser();
       if (!cu) return;
       await supabase.from('DrawLog').insert([{
-        card_name: localStorage.getItem("tarot_last_drawn_card") || "未知卡牌",
-        is_reversed: localStorage.getItem("tarot_last_card_reversed") === "true",
+        card_name: localStorage.getItem("tarot_single_last_drawn_card") || "未知卡牌",
+        is_reversed: localStorage.getItem("tarot_single_last_card_reversed") === "true",
         question: localStorage.getItem(LS_USER_QUESTION) || "",
         ai_reading: `[HIDDEN_ERROR] API Network Crash: ${err.message}`, 
-        user_id: cu.id 
+        user_id: cu.id,
+        spread_type: "single", // 🌟 明确写入单牌阵类型
+        spread_data: null
       }]);
     },
     onFinish: async (_, result) => {
       const { data: { user: cu } } = await supabase.auth.getUser();
       if (result.length > 10 && cu && !result.includes("Error") && !result.includes("503")) {
-        localStorage.setItem("tarot_last_ai_reading", result);
+        localStorage.setItem("tarot_single_last_ai_reading", result);
         await supabase.from('DrawLog').insert([{
-          card_name: localStorage.getItem("tarot_last_drawn_card") || "未知卡牌",
-          is_reversed: localStorage.getItem("tarot_last_card_reversed") === "true",
-          question: localStorage.getItem("tarot_user_question") || "",
+          card_name: localStorage.getItem("tarot_single_last_drawn_card") || "未知卡牌",
+          is_reversed: localStorage.getItem("tarot_single_last_card_reversed") === "true",
+          question: localStorage.getItem(LS_USER_QUESTION) || "",
           ai_reading: result,
-          user_id: cu.id 
+          user_id: cu.id,
+          spread_type: "single", // 🌟 明确写入单牌阵类型
+          spread_data: null
         }]);
       }
     },
@@ -88,6 +92,11 @@ export default function Home() {
     if (!user) return; 
 
     if (todayCloudLog) {
+      // 🌟 2. 核心拦截：如果云端最新记录是三牌阵等其他牌阵，绝对不加载到单牌阵页面！
+      if (todayCloudLog.spread_type && todayCloudLog.spread_type !== "single") {
+        return;
+      }
+
       setIsReversed(todayCloudLog.is_reversed);
       setCurrentCard(todayCloudLog.card_name);
       setFlipped(true);
@@ -114,8 +123,10 @@ export default function Home() {
     const { name: pickedCard, reversed: isRev } = pickRandomTarotCard();
     setCurrentCard(pickedCard);
     setIsReversed(isRev);
-    localStorage.setItem("tarot_last_drawn_card", pickedCard);
-    localStorage.setItem("tarot_last_card_reversed", isRev.toString());
+    
+    // 🌟 3. 使用专属缓存键名
+    localStorage.setItem("tarot_single_last_drawn_card", pickedCard);
+    localStorage.setItem("tarot_single_last_card_reversed", isRev.toString());
     setCompletion("");
   };
 
@@ -124,8 +135,9 @@ export default function Home() {
 
     setFlipped(true);
     
-    const realCardName = localStorage.getItem("tarot_last_drawn_card") || currentCard;
-    const realIsReversed = localStorage.getItem("tarot_last_card_reversed") === "true";
+    // 🌟 3. 使用专属缓存键名
+    const realCardName = localStorage.getItem("tarot_single_last_drawn_card") || currentCard;
+    const realIsReversed = localStorage.getItem("tarot_single_last_card_reversed") === "true";
 
     if (!user) {
       setAppStage("reading");
@@ -145,12 +157,13 @@ export default function Home() {
 
   useEffect(() => {
     if (appLoaded && !flipped) {
-      const cachedCard = localStorage.getItem("tarot_last_drawn_card");
+      // 🌟 3. 使用专属缓存键名
+      const cachedCard = localStorage.getItem("tarot_single_last_drawn_card");
       const cachedQuestion = localStorage.getItem(LS_USER_QUESTION);
 
       if (cachedCard && user) {
         setCurrentCard(cachedCard);
-        setIsReversed(localStorage.getItem("tarot_last_card_reversed") === "true");
+        setIsReversed(localStorage.getItem("tarot_single_last_card_reversed") === "true");
         setUserQuestion(cachedQuestion || "");
         
         setFlipped(true);
@@ -160,7 +173,7 @@ export default function Home() {
         void complete(t(locale, "readPrompt"), { 
           body: { 
             cardName: cachedCard, 
-            isReversed: localStorage.getItem("tarot_last_card_reversed") === "true", 
+            isReversed: localStorage.getItem("tarot_single_last_card_reversed") === "true", 
             locale, 
             question: (cachedQuestion || "").trim() 
           } 
@@ -319,7 +332,7 @@ export default function Home() {
         currentSpread="single"
       />
 
-      {/* 🌟 完美的全局居中悬浮毛玻璃 AuthWall 弹窗（外壳 + 关闭按钮） */}
+      {/* 🌟 完美的全局居中悬浮毛玻璃 AuthWall 弹窗 */}
       <AnimatePresence>
         {showAuthOverlay && (
           <motion.div 
@@ -344,8 +357,7 @@ export default function Home() {
                 <div className="text-2xl">✣</div>
               </button>
               
-              {/* 内部渲染纯净的 AuthWall 表单 */}
-             <AuthWall 
+              <AuthWall 
                 locale={locale} 
                 setLocale={setLocale} 
                 isOpen={showAuthOverlay} 
@@ -355,15 +367,6 @@ export default function Home() {
           </motion.div>
         )}
       </AnimatePresence>
-
-      <AuthWall 
-        locale={locale} 
-        setLocale={setLocale} 
-        isOpen={showAuthOverlay} 
-        onClose={() => setShowAuthOverlay(false)} 
-      />
-
-      
     </div>
   );
 }
