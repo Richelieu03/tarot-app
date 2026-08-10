@@ -70,7 +70,7 @@ export default function ReadingBox({
                </span>
             </div>
           ) : (
-            /* 状态 3: 还没开始翻牌，显示外部传来的引导文字 */
+            /* 状态 3 */
             <span className="text-zinc-500 font-sans not-italic text-[14px]">
               {placeholderText}
             </span>
