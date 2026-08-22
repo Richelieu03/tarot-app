@@ -21,6 +21,7 @@ export function useAuth(locale: Locale, setLocale: (l: Locale) => void) {
         .from('DrawLog')
         .select('*')
         .eq('user_id', userId)
+        .eq('spread_type', 'single')
         .gte('created_at', startOfToday.toISOString())
         .not('ai_reading', 'ilike', '[HIDDEN_ERROR]%')
         .order('created_at', { ascending: false })

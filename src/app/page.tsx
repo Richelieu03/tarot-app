@@ -74,6 +74,9 @@ export default function Home() {
     onFinish: async (_, result) => {
       const { data: { user: cu } } = await supabase.auth.getUser();
       if (result.length > 10 && cu && !result.includes("Error") && !result.includes("503")) {
+        const todayStr = new Date().toDateString();
+        localStorage.setItem("tarot_single_last_date", todayStr); 
+        
         localStorage.setItem("tarot_single_last_ai_reading", result);
         await supabase.from('DrawLog').insert([{
           card_name: localStorage.getItem("tarot_single_last_drawn_card") || "未知卡牌",
@@ -96,7 +99,12 @@ export default function Home() {
       if (todayCloudLog.spread_type && todayCloudLog.spread_type !== "single") {
         return;
       }
+      const todayStr = new Date().toDateString(); // current date "Sat Aug 22 2026"
+      const logDateStr = new Date(todayCloudLog.created_at).toDateString(); // The date
 
+      if (logDateStr !== todayStr) {
+        return; //if the log is not from today, ignore it
+      }
       setIsReversed(todayCloudLog.is_reversed);
       setCurrentCard(todayCloudLog.card_name);
       setFlipped(true);
@@ -124,7 +132,10 @@ export default function Home() {
     setCurrentCard(pickedCard);
     setIsReversed(isRev);
     
-    // 🌟 3. 使用专属缓存键名
+    // 🌟 record the time on cache
+    const todayStr = new Date().toDateString(); 
+    localStorage.setItem("tarot_single_last_date", todayStr); 
+
     localStorage.setItem("tarot_single_last_drawn_card", pickedCard);
     localStorage.setItem("tarot_single_last_card_reversed", isRev.toString());
     setCompletion("");
@@ -157,6 +168,19 @@ export default function Home() {
 
   useEffect(() => {
     if (appLoaded && !flipped) {
+      const cachedDate = localStorage.getItem("tarot_single_last_date");
+      const todayStr = new Date().toDateString();
+
+      if (cachedDate && cachedDate !== todayStr) {
+        localStorage.removeItem("tarot_single_last_drawn_card");
+        localStorage.removeItem("tarot_single_last_card_reversed");
+        localStorage.removeItem(LS_USER_QUESTION);
+        localStorage.removeItem("tarot_single_last_ai_reading");
+        localStorage.removeItem("tarot_single_last_date");
+        // return if the date is not today, to avoid loading stale data
+        return; 
+      }
+      
       // 🌟 3. 使用专属缓存键名
       const cachedCard = localStorage.getItem("tarot_single_last_drawn_card");
       const cachedQuestion = localStorage.getItem(LS_USER_QUESTION);
