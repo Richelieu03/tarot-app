@@ -11,7 +11,7 @@ export function useAuth(locale: Locale, setLocale: (l: Locale) => void) {
   const [appLoaded, setAppLoaded] = useState(false);
   const [todayCloudLog, setTodayCloudLog] = useState<any>(null);
 
-  // 云端每日对账函数
+  // everyday check for existing DrawLog for the user
   const checkCloudDrawStatus = async (userId: string) => {
     try {
       const startOfToday = new Date();
@@ -39,7 +39,7 @@ export function useAuth(locale: Locale, setLocale: (l: Locale) => void) {
   };
 
   useEffect(() => {
-    // 1. 初始化 Session 获取
+    // initial check for existing session and user
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       const currentUser = session?.user ?? null;
       setUser(currentUser);
@@ -54,7 +54,7 @@ export function useAuth(locale: Locale, setLocale: (l: Locale) => void) {
       setAppLoaded(true); 
     });
 
-    // 2. 监听全局 Auth 状态切换
+    // Auth status change listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       const currentUser = session?.user ?? null;
       setUser(currentUser);
@@ -75,17 +75,16 @@ export function useAuth(locale: Locale, setLocale: (l: Locale) => void) {
 
   const handleLogout = async () => {
     try {
-      // 1. 🌟 加上 await，必须等待 Supabase 官方彻底断开连接
+      // 1. await，wait until Supabase session is cleared, to avoid race conditions
       await supabase.auth.signOut();
     } catch (err) {
       console.error("Supabase 结界断开异常:", err);
     }
     
-    // 2. 🌟 核心修复：手动清空当前状态，让主页（Home）的 if(!user) 瞬间收到清空通知，秒切回登录墙！
     setUser(null);
     setTodayCloudLog(null);
     
-    // 3. 清空本地缓存
+    // clear localStorage to remove any cached data related to the user
     localStorage.clear();
     
   };
