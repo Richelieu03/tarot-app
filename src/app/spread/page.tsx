@@ -125,8 +125,21 @@ export default function ThreeCardSpread() {
   const handleSelectFromFan = (index: number) => {
     if (isAllDrawn || appStage === "reading") return;
 
-    const { name: pickedCard, reversed: isRev } = pickRandomTarotCard();
-    const updatedSlots = [...slots];
+    let pickedCard = "";
+    let isRev = false;
+    let attempts = 0; // 安全锁，防止死循环
+
+    // 🌟 if been picked then repick another card
+    do {
+      const result = pickRandomTarotCard();
+      pickedCard = result.name;
+      isRev = result.reversed;
+      attempts++;
+    } while (
+      slots.some(slot => slot.cardName === pickedCard) && attempts < 100
+    );
+
+  const updatedSlots = [...slots];
     
     updatedSlots[activeSlotIndex] = {
       ...updatedSlots[activeSlotIndex],
