@@ -35,6 +35,16 @@ const ui = {
     questionPlaceholder:
       "  Hold your question in silence, then write it here…",
     enterSpread: "Enter the Spread",
+    subtitleRevealed: "Your card has been revealed.",
+    readingRevealed: "Card revealed",
+    meaningTitle: "Card meaning",
+    personalReadingTitle: "Personal reading",
+    loginForReading: "QUICK LOGIN",
+    yourQuestion: "Your question",
+    slotPast: "Past",
+    slotPresent: "Present",
+    slotFuture: "Future",
+    readSpreadPrompt: "Please interpret my Three-Card Spread:",
   },
   zh: {
     title: "神谕之门",
@@ -42,8 +52,8 @@ const ui = {
     subtitleAfterSelect: "点击牌背，揭晓指引",
     upright: "正位",
     reversed: "逆位",
-    oracleBadge: "TAROT ORACLE",
-    readingHeader: "TAROT MASTER READING",
+    oracleBadge: "塔罗神谕",
+    readingHeader: "塔罗大师解读",
     readingLoading: "正在通灵…",
     readingDone: "神谕已降临",
     readingWait: "等待翻牌",
@@ -66,6 +76,16 @@ const ui = {
     ritualSubtitle: "静心凝神，将想问之事诉诸笔墨，再步入牌阵。",
     questionPlaceholder: "  在心中默念并输入你的问题…",
     enterSpread: "进入牌阵",
+    subtitleRevealed: "你的牌已揭晓",
+    readingRevealed: "牌面已揭晓",
+    meaningTitle: "牌面释义",
+    personalReadingTitle: "专属解读",
+    loginForReading: "快速登录解牌",
+    yourQuestion: "你的问题",
+    slotPast: "过去",
+    slotPresent: "现在",
+    slotFuture: "未来",
+    readSpreadPrompt: "请为我的三牌阵进行综合占卜：",
   },
 } as const;
 
@@ -90,26 +110,3 @@ export function isEnergyRecoveryBlock(completion: string): boolean {
     completion.includes(t("en", "energyErrorKeyword"))
   );
 }
-
-export const i18nData = {
-  zh: {
-    title: "星界神谕",
-    // ... 原有的保持不变 ...
-    
-    // 🌟 在这里把这三个新钥匙注册进去！
-    slotPast: "【过去】",
-    slotPresent: "【现在】",
-    slotFuture: "【未来】",
-    readSpreadPrompt: "请为我的三牌阵进行综合占卜：",
-  },
-  en: {
-    title: "Astral Oracle",
-    // ... 原有的保持不变 ...
-    
-    // 🌟 英文版也必须严格对称地注册进去！
-    slotPast: "Past",
-    slotPresent: "Present",
-    slotFuture: "Future",
-    readSpreadPrompt: "Please interpret my Three-Card Spread:",
-  }
-};

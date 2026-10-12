@@ -20,7 +20,8 @@ import LocaleSwitcher from "../components/LocaleSwitcher";
 import TarotFan from "../components/TarotFan"; 
 import ReadingBox from "../components/ReadingBox";
 import SpreadSelector from "../components/SpreadSelector";
-import { getAvatarColor } from "../lib/utils";
+import { getAvatarColor, getInitial } from "../lib/utils";
+import { getCardMeaning } from "../lib/tarot-meanings";
 
 type AppStage = "asking" | "selecting" | "reading";
 
@@ -71,25 +72,21 @@ export default function Home() {
         spread_data: null
       }]);
     },
-    onFinish: async (_, result) => {
-      const { data: { user: cu } } = await supabase.auth.getUser();
-      if (result.length > 10 && cu && !result.includes("Error") && !result.includes("503")) {
-        const todayStr = new Date().toDateString();
-        localStorage.setItem("tarot_single_last_date", todayStr); 
-        
+    // DrawLog is now written by /api/tarot itself (the daily limit counts those rows)
+    onFinish: (_, result) => {
+      if (result.length > 10 && !result.includes("Error") && !result.includes("503")) {
+        localStorage.setItem("tarot_single_last_date", new Date().toDateString());
         localStorage.setItem("tarot_single_last_ai_reading", result);
-        await supabase.from('DrawLog').insert([{
-          card_name: localStorage.getItem("tarot_single_last_drawn_card") || "未知卡牌",
-          is_reversed: localStorage.getItem("tarot_single_last_card_reversed") === "true",
-          question: localStorage.getItem(LS_USER_QUESTION) || "",
-          ai_reading: result,
-          user_id: cu.id,
-          spread_type: "single", // 🌟 明确写入单牌阵类型
-          spread_data: null
-        }]);
       }
     },
   });
+
+  // Every API call carries the Supabase access token; the server verifies it and enforces the daily limit
+  const completeWithAuth = async (prompt: string, options: { body: object }) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const headers: Record<string, string> = session ? { Authorization: `Bearer ${session.access_token}` } : {};
+    return complete(prompt, { ...options, headers });
+  };
 
   useEffect(() => {
     if (!user) return; 
@@ -156,11 +153,12 @@ export default function Home() {
     }
 
     setAppStage("reading");
-    void complete(t(locale, "readPrompt"), { 
+    void completeWithAuth(t(locale, "readPrompt"), { 
       body: { 
         cardName: realCardName, 
         isReversed: realIsReversed, 
         locale, 
+        tzOffset: new Date().getTimezoneOffset(),
         question: userQuestion.trim() 
       } 
     });
@@ -185,7 +183,9 @@ export default function Home() {
       const cachedCard = localStorage.getItem("tarot_single_last_drawn_card");
       const cachedQuestion = localStorage.getItem(LS_USER_QUESTION);
 
-      if (cachedCard && user) {
+      // Skip if today's reading is already restored from the cloud — calling the API again
+      // would burn quota (and now gets rejected by the server-side daily limit)
+      if (cachedCard && user && !todayCloudLog) {
         setCurrentCard(cachedCard);
         setIsReversed(localStorage.getItem("tarot_single_last_card_reversed") === "true");
         setUserQuestion(cachedQuestion || "");
@@ -194,11 +194,12 @@ export default function Home() {
         setAppStage("reading");
         setIsSelecting(false);
         
-        void complete(t(locale, "readPrompt"), { 
+        void completeWithAuth(t(locale, "readPrompt"), { 
           body: { 
             cardName: cachedCard, 
             isReversed: localStorage.getItem("tarot_single_last_card_reversed") === "true", 
             locale, 
+            tzOffset: new Date().getTimezoneOffset(),
             question: (cachedQuestion || "").trim() 
           } 
         });
@@ -206,17 +207,32 @@ export default function Home() {
     }
   }, [appLoaded, user]);
 
-  const subtitleMain = isSelecting ? t(locale, "subtitleSelecting") : t(locale, "subtitleAfterSelect");
+  const subtitleMain = isSelecting
+    ? t(locale, "subtitleSelecting")
+    : flipped
+      ? t(locale, "subtitleRevealed")
+      : t(locale, "subtitleAfterSelect");
   const readingStatusLabel = isLoading
     ? t(locale, "readingLoading")
     : flipped && completion && !isEnergyRecoveryBlock(completion)
       ? t(locale, "readingDone")
-      : t(locale, "readingWait");
+      : flipped
+        ? t(locale, "readingRevealed")
+        : t(locale, "readingWait");
+
+  // Pre-written meaning: free for everyone, no API call
+  const cardMeaning = flipped ? getCardMeaning(currentCard, isReversed, locale) : null;
+  const meanings = cardMeaning
+    ? [{
+        label: `${getCardDisplayName(currentCard, locale)} (${isReversed ? t(locale, "reversed") : t(locale, "upright")})`,
+        text: cardMeaning,
+      }]
+    : undefined;
 
   if (!appLoaded) return <div className="min-h-screen bg-[#05030a]" />;
 
   return (
-    <div className={`relative flex flex-col overflow-x-hidden bg-[#05030a] font-sans text-zinc-50 ${user && appStage === "reading" ? "min-h-screen overflow-y-auto" : "h-screen overflow-hidden w-full fixed inset-0"}`}>
+    <div className={`relative flex flex-col overflow-x-hidden bg-[#05030a] font-sans text-zinc-50 ${appStage === "reading" ? "min-h-screen overflow-y-auto" : "h-screen overflow-hidden w-full fixed inset-0"}`}>
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(900px_520px_at_50%_25%,rgba(140,70,255,0.25),transparent_60%)]" />
       
       {/* 左上角全局导航：未登录时点击头像直接唤起弹窗 */}
@@ -239,7 +255,7 @@ export default function Home() {
             />
           ) : (
             <div className={`w-full h-full flex items-center justify-center text-xs font-bold text-zinc-300 ${getAvatarColor(user?.email || "")}`}>
-              {(user?.email || "🔮").charAt(0).toUpperCase()}
+              {getInitial(user?.email)}
             </div>
           )}
         </button>
@@ -315,30 +331,26 @@ export default function Home() {
                   readingStatusLabel={readingStatusLabel}
                   locale={locale}
                   className={appStage === "reading" ? "-mt-10" : "mt-10"}
+                  question={userQuestion.trim() || undefined}
+                  meanings={meanings}
+                  showAiSection={!!user || !flipped}
+                  footer={!user && flipped ? (
+                    <button
+                      onClick={() => setShowAuthOverlay(true)}
+                      className="group rounded-full border border-amber-400/30 bg-gradient-to-b from-amber-500/10 to-amber-950/50 px-8 py-3 text-xs font-bold tracking-[0.15em] text-amber-200 shadow-[0_0_30px_-5px_rgba(245,158,11,0.25)] hover:border-amber-400/60 hover:text-amber-100 hover:shadow-[0_0_40px_rgba(245,158,11,0.4)] transition-all duration-300 active:scale-95"
+                    >
+                      🔮 {t(locale, "loginForReading")}
+                    </button>
+                  ) : undefined}
                   onRetry={() => {
                     if (user) {
-                      void complete(t(locale, "readPrompt"), { 
-                        body: { cardName: currentCard, isReversed, locale, question: userQuestion.trim() } 
+                      void completeWithAuth(t(locale, "readPrompt"), { 
+                        body: { cardName: currentCard, isReversed, locale, question: userQuestion.trim(), tzOffset: new Date().getTimezoneOffset() } 
                       });
                     }
                   }}
                 />
 
-                {/* 未登录且翻牌后显示快速登录引导按钮 */}
-                {!user && flipped && (
-                  <motion.div 
-                    initial={{ opacity: 0, y: 6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="absolute left-1/2 -translate-x-1/2 bottom-6 z-20 flex flex-col items-center w-full max-w-sm px-4"
-                  >
-                    <button
-                      onClick={() => setShowAuthOverlay(true)}
-                      className="group rounded-full border border-amber-400/30 bg-gradient-to-b from-amber-500/10 to-amber-950/50 px-8 py-3 text-xs font-bold tracking-[0.15em] text-amber-200 shadow-[0_0_30px_-5px_rgba(245,158,11,0.25)] hover:border-amber-400/60 hover:text-amber-100 hover:shadow-[0_0_40px_rgba(245,158,11,0.4)] transition-all duration-300 active:scale-95"
-                    >
-                      🔮 {locale === "zh" ? "快速登录解牌" : "QUICK LOGIN"}
-                    </button>
-                  </motion.div>
-                )}
               </div>
             </motion.div>
           )}

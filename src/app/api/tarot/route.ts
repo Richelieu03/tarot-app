@@ -1,6 +1,16 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { createClient } from "@supabase/supabase-js";
 import type { Locale } from "../../../lib/locale";
 import { getCardDisplayName } from "../../../lib/tarot-labels";
+import { TAROT_DECK } from "../../../lib/tarot-deck";
+
+// Server-side daily quota per spread type (successful readings per user per local day).
+// The client also limits this, but only this check actually protects the API key.
+const DAILY_LIMITS = { single: 1, trinity: 3 } as const;
+type SpreadType = keyof typeof DAILY_LIMITS;
+
+const MAX_QUESTION_LENGTH = 500;
+const DECK_SET = new Set<string>(TAROT_DECK);
 
 // 1. 完善类型定义，完美兼容单牌与牌阵数据结构
 interface SpreadSlot {
@@ -18,10 +28,39 @@ interface TarotRequestBody {
   // 牌阵字段
   isSpread?: boolean;
   spreadData?: SpreadSlot[];
+  // Browser's Date#getTimezoneOffset(), used to decide where "today" starts
+  tzOffset?: unknown;
 }
 
 function parseLocale(v: unknown): Locale {
   return v === "zh" ? "zh" : "en";
+}
+
+function textResponse(text: string, status = 200) {
+  return new Response(text, { status, headers: { "Content-Type": "text/plain; charset=utf-8" } });
+}
+
+/** ISO timestamp of 00:00 in the user's local day, given getTimezoneOffset() minutes. */
+function startOfUserDay(tzOffset: unknown): string {
+  const off =
+    typeof tzOffset === "number" && Number.isFinite(tzOffset)
+      ? Math.max(-840, Math.min(840, Math.round(tzOffset)))
+      : 0;
+  const local = new Date(Date.now() - off * 60_000); // local wall-clock time in UTC fields
+  local.setUTCHours(0, 0, 0, 0);
+  return new Date(local.getTime() + off * 60_000).toISOString();
+}
+
+/** Supabase client that acts as the calling user, so RLS policies still apply. */
+function supabaseAsUser(accessToken: string) {
+  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+    global: { headers: { Authorization: `Bearer ${accessToken}` } },
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
+
+function isValidCard(name: unknown): name is string {
+  return typeof name === "string" && DECK_SET.has(name);
 }
 
 // 2. 🌟 低耦合纯函数：解耦卡牌名称转换与正逆位逻辑
@@ -42,22 +81,61 @@ export async function POST(req: Request) {
 
   const locale = parseLocale(body.locale);
 
+  // ── Auth: only signed-in users may spend AI quota ──
+  const token = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+  if (!token) {
+    return textResponse(locale === "zh" ? "请先登录后再解牌。" : "Please log in to receive a reading.", 401);
+  }
+  const db = supabaseAsUser(token);
+  const { data: { user }, error: authError } = await db.auth.getUser(token);
+  if (authError || !user) {
+    return textResponse(locale === "zh" ? "登录已失效，请重新登录。" : "Session expired, please log in again.", 401);
+  }
+
+  // ── Validate input before spending anything ──
+  const spreadType: SpreadType =
+    body.isSpread && Array.isArray(body.spreadData) && body.spreadData.length > 0 ? "trinity" : "single";
+  const slots = spreadType === "trinity" ? body.spreadData!.slice(0, 3) : [];
+  if (spreadType === "single" ? !isValidCard(body.cardName) : !slots.every((s) => isValidCard(s.cardName))) {
+    return textResponse("Invalid card", 400);
+  }
+  const questionRaw = (typeof body.question === "string" ? body.question.trim() : "").slice(0, MAX_QUESTION_LENGTH);
+
+  // ── Daily quota, counted from successful readings stored in DrawLog ──
+  const { count, error: countError } = await db
+    .from("DrawLog")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", user.id)
+    .eq("spread_type", spreadType)
+    .gte("created_at", startOfUserDay(body.tzOffset))
+    .not("ai_reading", "ilike", "[HIDDEN_ERROR]%");
+  if (countError) {
+    console.error("DrawLog quota check failed:", countError.message);
+    return textResponse(locale === "zh" ? "服务暂时不可用，请稍后再试。" : "Service unavailable, please try again later.", 503);
+  }
+  if ((count ?? 0) >= DAILY_LIMITS[spreadType]) {
+    return textResponse(
+      locale === "zh" ? "今日的神谕次数已用完，请明天再来。" : "You've used today's readings. Come back tomorrow.",
+      429,
+    );
+  }
+
   try {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       const msg = locale === "en"
         ? "[Oracle] Missing API key (GEMINI_API_KEY)."
         : "【神谕提示】缺少魔法钥匙 (GEMINI_API_KEY)。";
-      return new Response(msg, { headers: { "Content-Type": "text/plain; charset=utf-8" } });
+      return textResponse(msg);
     }
 
     // 3. 🌟 核心分流策略：根据模式构建不同的卡牌上下文与指令目标
     let cardsContext = "";
     let taskInstruction = "";
 
-    if (body.isSpread && Array.isArray(body.spreadData) && body.spreadData.length > 0) {
+    if (spreadType === "trinity") {
       // —— 牌阵模式（如圣三角）——
-      const formattedList = body.spreadData
+      const formattedList = slots
         .map((slot, idx) => {
           const label = typeof slot.slotLabel === "string" ? slot.slotLabel : `位置 ${idx + 1}`;
           const cardStr = formatCard(slot.cardName, slot.isReversed, locale);
@@ -65,7 +143,11 @@ export async function POST(req: Request) {
         })
         .join("\n");
 
-      const taskInstruction = locale === "zh"
+      cardsContext = locale === "zh"
+        ? `求问者的三牌阵抽卡结果如下：\n${formattedList}`
+        : `The querent's three-card spread:\n${formattedList}`;
+
+      taskInstruction = locale === "zh"
     ? `【你的角色】
 你是一位看透世事、高情商且极具洞察力的现代心理咨询师。你精通塔罗牌的能量运作与心理学投射，但从不掉书袋。你深知“解牌就是解心”，能精准把握用户问题的“重量”，并给出最妥帖的回应。
 
@@ -139,7 +221,6 @@ Output the final reading text directly:`
     }
 
     // 4. 处理用户提问模块
-    const questionRaw = typeof body.question === "string" ? body.question.trim() : "";
     const questionContext = questionRaw
       ? (locale === "zh" 
           ? `求问者心中渴望洞察的困惑是：「${questionRaw}」。请严格锚定此问题进行解牌。`
@@ -153,19 +234,64 @@ Output the final reading text directly:`
       ? "你是一位通晓星界神谕的神秘塔罗大师。" 
       : "You are a mystical tarot master grounded in astral wisdom.";
     
-    const systemPrompt = `${rolePrompt}\n\n${cardsContext}\n\n${questionContext}\n\n${taskInstruction}\n注：除了直接输出解牌内容外，别的内容（如客套话）一概不要回答。`;
+    // Pin the output language explicitly — without this, short CJK questions like "今日运势"
+    // can make the model drift into Japanese.
+    const languageRule = locale === "zh"
+      ? "【语言要求】必须全程使用简体中文输出，禁止使用日语、繁体中文或其他语言。"
+      : "[Language] Respond in English only.";
+
+    const systemPrompt = `${rolePrompt}\n\n${cardsContext}\n\n${questionContext}\n\n${taskInstruction}\n\n${languageRule}\n注：除了直接输出解牌内容外，别的内容（如客套话）一概不要回答。`;
 
     // 6. 发起 AI 调用与流式返回
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const model = genAI.getGenerativeModel({
+      model: "gemini-2.5-flash",
+      systemInstruction: languageRule,
+      // 2.5 Flash "thinks" before answering by default, which adds several seconds.
+      // A short reading doesn't need it. (Field isn't in this SDK's types yet, but is passed through as-is.)
+      generationConfig: { thinkingConfig: { thinkingBudget: 0 } } as Record<string, unknown>,
+    });
     const result = await model.generateContent(systemPrompt);
     const fullText = result.response.text();
 
+    // Record the reading server-side: this row is what the daily quota counts,
+    // so it must not depend on the browser finishing the stream.
+    const { error: insertError } = await db.from("DrawLog").insert([
+      spreadType === "single"
+        ? {
+            user_id: user.id,
+            spread_type: "single",
+            card_name: body.cardName,
+            is_reversed: !!body.isReversed,
+            question: questionRaw,
+            ai_reading: fullText,
+            spread_data: null,
+          }
+        : {
+            user_id: user.id,
+            spread_type: "trinity",
+            card_name: slots[0].cardName,
+            is_reversed: !!slots[0].isReversed,
+            question: questionRaw,
+            ai_reading: fullText,
+            spread_data: slots.map((s) => ({
+              name: s.cardName,
+              is_reversed: !!s.isReversed,
+              position_label: s.slotLabel ?? "",
+            })),
+          },
+    ]);
+    if (insertError) console.error("DrawLog insert failed:", insertError.message);
+
     const stream = new ReadableStream({
       async start(controller) {
-        for (const char of fullText) {
-          controller.enqueue(new TextEncoder().encode(char));
-          await new Promise((resolve) => setTimeout(resolve, 30));
+        // Typewriter effect: a few characters per tick instead of 1 char / 30ms
+        // (a 300-char reading used to take ~9s just to "type out")
+        const encoder = new TextEncoder();
+        const chars = Array.from(fullText);
+        for (let i = 0; i < chars.length; i += 3) {
+          controller.enqueue(encoder.encode(chars.slice(i, i + 3).join("")));
+          await new Promise((resolve) => setTimeout(resolve, 20));
         }
         controller.close();
       },
@@ -183,6 +309,6 @@ Output the final reading text directly:`
     const text = locale === "en"
       ? `[Ritual interrupted]\n${msg}`
       : `【魔法阵崩溃】真正的报错原因是：\n${msg}`;
-    return new Response(text, { headers: { "Content-Type": "text/plain; charset=utf-8" } });
+    return textResponse(text);
   }
 }

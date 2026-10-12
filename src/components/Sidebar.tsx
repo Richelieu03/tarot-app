@@ -7,7 +7,7 @@ import Link from "next/link";
 import { useState } from "react"; 
 import { supabase } from "../lib/supabase"; 
 import HistoryModal from "./HistoryModal"; 
-import { getAvatarColor } from "../lib/utils";
+import { getAvatarColor, getInitial } from "../lib/utils";
 
 interface SidebarProps {
   isOpen: boolean;
@@ -111,7 +111,7 @@ export default function Sidebar({
                   ) : (
                     
                     <div className={`w-20 h-20 rounded-full border-2 flex items-center justify-center text-3xl font-bold text-zinc-100 shadow-[0_0_20px_rgba(139,92,246,0.1)] ${getAvatarColor(user?.email || "")}`}>
-                      {(user?.user_metadata?.full_name || user?.email || "🔮").charAt(0).toUpperCase()}
+                      {getInitial(user?.user_metadata?.full_name || user?.email)}
                     </div>
                   )}
                 </button>

@@ -1,6 +1,7 @@
 // src/components/ReadingBox.tsx
 "use client";
 
+import type { ReactNode } from "react";
 import type { Locale } from "../lib/locale";
 import { t } from "../lib/ui-i18n";
 
@@ -14,6 +15,14 @@ interface ReadingBoxProps {
   locale: Locale;
   onRetry: () => void;
   className?: string;
+  /** The user's question, echoed back above the reading */
+  question?: string;
+  /** Pre-written card meanings; shown to everyone, no API call needed */
+  meanings?: { label: string; text: string }[];
+  /** false hides the AI reading area (e.g. guests) */
+  showAiSection?: boolean;
+  /** Rendered at the bottom of the box (e.g. login call-to-action) */
+  footer?: ReactNode;
 }
 
 export default function ReadingBox({
@@ -26,7 +35,12 @@ export default function ReadingBox({
   locale,
   onRetry,
   className = "mt-16",
+  question,
+  meanings,
+  showAiSection = true,
+  footer,
 }: ReadingBoxProps) {
+  const hasMeanings = !!meanings && meanings.length > 0;
   return (
     <div className={`relative z-20 w-full max-w-lg md:max-w-2xl ${className}`}>
       <div className="border border-white/5 bg-white/5 p-6 shadow-xl backdrop-blur-2xl">
@@ -38,7 +52,35 @@ export default function ReadingBox({
           </span>
         </div>
         
+        {/* 问题回显 */}
+        {question && (
+          <p className="mb-4 text-left text-xs leading-6 text-zinc-500">
+            {t(locale, "yourQuestion")}：<span className="text-zinc-300">{question}</span>
+          </p>
+        )}
+
+        {/* 预存牌义 */}
+        {hasMeanings && (
+          <div className="mb-2 space-y-3 text-left">
+            <div className="text-[10px] tracking-widest text-amber-400/70">{t(locale, "meaningTitle")}</div>
+            {meanings!.map((m) => (
+              <p key={m.label} className="text-sm leading-7 text-zinc-300">
+                <span className="font-semibold text-zinc-100">{m.label}</span>
+                <span className="mx-2 text-zinc-600">·</span>
+                {m.text}
+              </p>
+            ))}
+          </div>
+        )}
+
+        {hasMeanings && showAiSection && (
+          <div className="mb-3 mt-5 border-t border-white/10 pt-4 text-left text-[10px] tracking-widest text-violet-400/80">
+            {t(locale, "personalReadingTitle")}
+          </div>
+        )}
+
         {/* 文本内容区 */}
+        {showAiSection && (
         <div className="min-h-[120px] text-left font-serif text-[15px] italic leading-8 text-zinc-200 whitespace-pre-wrap flex flex-col justify-between">
           {isErrorState ? (
             <div className="flex flex-col items-start text-sm text-red-400/80 font-sans not-italic">
@@ -76,6 +118,9 @@ export default function ReadingBox({
             </span>
           )}
         </div>
+        )}
+
+        {footer && <div className="mt-6 flex justify-center">{footer}</div>}
       </div>
     </div>
   );

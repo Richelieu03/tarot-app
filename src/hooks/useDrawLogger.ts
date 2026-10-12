@@ -18,7 +18,7 @@ export function useDrawLogger(locale: Locale) {
     isReversed: boolean;
     question?: string;
     aiReading: string;
-    spreadType?: 'single' | 'three_card'; // card spread type
+    spreadType?: 'single' | 'trinity'; // card spread type
     spreadData?: any;                    // json data for the spread, if applicable
   }) => {
     if (!user) {

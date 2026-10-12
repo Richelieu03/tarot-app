@@ -9,3 +9,7 @@ export const getAvatarColor = (email?: string) => {
   const hash = email.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
   return colors[hash % colors.length];
 };
+
+/** First visible character, uppercased. Array.from keeps emoji/CJK surrogate pairs intact. */
+export const getInitial = (text?: string | null, fallback = "🔮") =>
+  (Array.from(text?.trim() || "")[0] ?? fallback).toUpperCase();

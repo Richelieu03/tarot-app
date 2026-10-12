@@ -54,7 +54,7 @@ export default function TarotCard({
         <div className="absolute inset-0 flex flex-col items-center justify-center overflow-hidden rounded-none border border-white/20 bg-black shadow-2xl [backface-visibility:hidden] [transform:rotateY(180deg)_translateZ(0.1px)]">
           <img
             src={`/tarot/${cardName}.jpg`}
-            alt={cardLabel}
+            alt={isFlipped ? cardLabel : ""}
             className={`absolute inset-0 h-full w-full object-cover object-center opacity-90 ${
               isReversed ? "rotate-180" : ""
             }`}
@@ -66,7 +66,8 @@ export default function TarotCard({
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent" />
           
-          {/* 卡牌标签文本 */}
+          {/* 卡牌标签文本 — only rendered once flipped, so the result isn't readable in the DOM early */}
+          {isFlipped && (
           <div className="relative z-10 mt-auto w-full px-2 pb-3 md:px-6 md:pb-8 text-center leading-tight">
             {oracleBadge && (
               <div className="text-[7px] md:text-[10px] tracking-widest md:tracking-[0.3em] text-violet-400 drop-shadow-md">
@@ -78,6 +79,7 @@ export default function TarotCard({
               <span className="text-[10px] md:text-base font-normal text-zinc-300">({orientationLabel})</span>
             </div>
           </div>
+          )}
         </div>
       </motion.div>
     </div>

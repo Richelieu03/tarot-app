@@ -12,7 +12,8 @@ import { getCardDisplayName } from "../../lib/tarot-labels";
 import { isEnergyRecoveryBlock, t } from "../../lib/ui-i18n";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../hooks/useAuth"; 
-import { getAvatarColor } from "../../lib/utils";
+import { getAvatarColor, getInitial } from "../../lib/utils";
+import { getCardMeaning } from "../../lib/tarot-meanings";
 import { useDrawLogger } from "../../hooks/useDrawLogger"; 
 
 import AuthWall from "../../components/AuthWall";
@@ -78,34 +79,23 @@ export default function ThreeCardSpread() {
     streamProtocol: "text",
     onError: async (err) => {
       await saveLog({
+        spreadType: "trinity",
         cardName: slotsRef.current[0]?.cardName || "愚者",
         isReversed: slotsRef.current[0]?.isReversed || false,
         question: `【圣三角阵报错】${questionRef.current}`,
         aiReading: `[HIDDEN_ERROR] API Network Crash: ${err.message}`, 
       });
     },
-    onFinish: async (_, result) => {
-      if (result.length <= 10 || result.includes("Error")) return;
-
-      const currentSlots = slotsRef.current;
-      const currentQ = questionRef.current.trim();
-
-      const spreadSummary = currentSlots
-        .map(s => {
-          const pos = t(locale, s.labelKey as any);
-          const rev = s.isReversed ? (locale === "zh" ? "逆" : "Rev") : (locale === "zh" ? "正" : "Up");
-          return `${pos}:${s.cardName}(${rev})`;
-        })
-        .join(" | ");
-
-      await saveLog({
-        cardName: currentSlots[0]?.cardName || "愚者",
-        isReversed: currentSlots[0]?.isReversed || false,
-        question: `【圣三角阵】${spreadSummary}${currentQ ? `\n问题：${currentQ}` : ""}`,
-        aiReading: result,
-      });
-    },
+    // Successful readings are saved by /api/tarot (spread_type "trinity" + spread_data),
+    // which is also what the server-side daily limit counts.
   });
+
+  // Every API call carries the Supabase access token; the server verifies it and enforces the daily limit
+  const completeWithAuth = async (prompt: string, options: { body: object }) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const headers: Record<string, string> = session ? { Authorization: `Bearer ${session.access_token}` } : {};
+    return complete(prompt, { ...options, headers });
+  };
 
   useEffect(() => {
     document.documentElement.lang = locale === "zh" ? "zh-CN" : "en";
@@ -177,12 +167,13 @@ export default function ThreeCardSpread() {
       ? `${basePrompt}\n\n占卜问题：${userQuestion.trim()}\n\n圣三角牌阵抽卡结果如下：\n${cardsDescription}\n\n请结合以上时空脉络，为求问者提供深度、复合、连贯的整体神谕破译。`
       : `${basePrompt}\n\nQuestion: ${userQuestion.trim()}\n\nThree-Card Spread Results:\n${cardsDescription}\n\nPlease provide a deep, coherent, and combined oracle interpretation based on this timeline.`;
 
-    void complete(fullPrompt, { 
+    void completeWithAuth(fullPrompt, { 
       body: { 
         isSpread: true, 
         spreadData, 
         locale, 
         question: userQuestion.trim(),
+        tzOffset: new Date().getTimezoneOffset(),
         cardName: finalSlots[0]?.cardName || "愚者",
         isReversed: finalSlots[0]?.isReversed || false
       } 
@@ -198,6 +189,14 @@ export default function ThreeCardSpread() {
     : slots.every(s => s.isFlipped) && completion && !isEnergyRecoveryBlock(completion)
       ? t(locale, "readingDone" as any)
       : t(locale, "readingWait" as any);
+
+  // Pre-written meanings for each slot once all three cards are face up
+  const spreadMeanings = slots.every(s => s.isFlipped && s.cardName)
+    ? slots.map(s => ({
+        label: `${t(locale, s.labelKey as any)} · ${getCardDisplayName(s.cardName!, locale)} (${s.isReversed ? t(locale, "reversed") : t(locale, "upright")})`,
+        text: getCardMeaning(s.cardName!, s.isReversed, locale) ?? "",
+      }))
+    : undefined;
 
   if (!appLoaded) return <div className="min-h-screen bg-[#05030a]" />;
   
@@ -234,7 +233,7 @@ export default function ThreeCardSpread() {
               />
             ) : (
               <div className={`w-full h-full rounded-full flex items-center justify-center text-xs font-bold text-zinc-400 ${getAvatarColor(user?.email || "")}`}>
-                {(user?.email || "🔮").charAt(0).toUpperCase()}
+                {getInitial(user?.email)}
               </div>
           )}
         </button>
@@ -341,6 +340,8 @@ export default function ThreeCardSpread() {
                 locale={locale}
                 className={appStage === "reading" ? "-mt-4 mb-10 w-full max-w-3xl" : "mt-6 w-full max-w-3xl"} 
                 onRetry={() => triggerSpreadAIReading(slots)}
+                question={userQuestion.trim() || undefined}
+                meanings={spreadMeanings}
               />
             </motion.div>
           )}
