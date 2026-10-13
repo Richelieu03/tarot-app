@@ -14,6 +14,7 @@ import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../hooks/useAuth"; 
 import { getAvatarColor, getInitial } from "../../lib/utils";
 import { getCardMeaning } from "../../lib/tarot-meanings";
+import { DAILY_LIMITS, DAILY_LIMIT_MARKER, SPREAD_COOLDOWN_MS, cooldownMessage, dailyLimitMessage, isDailyLimitError } from "../../lib/daily-limit";
 import { useDrawLogger } from "../../hooks/useDrawLogger"; 
 
 import AuthWall from "../../components/AuthWall";
@@ -23,6 +24,7 @@ import LocaleSwitcher from "../../components/LocaleSwitcher";
 import TarotFan from "../../components/TarotFan"; 
 import ReadingBox from "../../components/ReadingBox";
 import SpreadSelector from "../../components/SpreadSelector"; 
+import CooldownRing from "../../components/CooldownRing";
 
 type AppStage = "asking" | "selecting" | "reading";
 
@@ -35,9 +37,9 @@ interface CardSlot {
 }
 
 const INITIAL_SLOTS: CardSlot[] = [
-  { id: "past", labelKey: "slotPast", cardName: null, isReversed: false, isFlipped: false },
-  { id: "present", labelKey: "slotPresent", cardName: null, isReversed: false, isFlipped: false },
-  { id: "future", labelKey: "slotFuture", cardName: null, isReversed: false, isFlipped: false },
+  { id: "past", labelKey: "slot1", cardName: null, isReversed: false, isFlipped: false },
+  { id: "present", labelKey: "slot2", cardName: null, isReversed: false, isFlipped: false },
+  { id: "future", labelKey: "slot3", cardName: null, isReversed: false, isFlipped: false },
 ];
 
 export default function ThreeCardSpread() {
@@ -59,10 +61,21 @@ export default function ThreeCardSpread() {
   const [isSelecting, setIsSelecting] = useState(true);
   
   const [slots, setSlots] = useState<CardSlot[]>(INITIAL_SLOTS);
+  // Successful three-card readings today (server enforces DAILY_LIMITS.trinity)
+  const [usedToday, setUsedToday] = useState(0);
+  const restoredRef = useRef(false);
+  // Time of the latest successful three-card reading (for the 2-hour cooldown)
+  const [lastSpreadAt, setLastSpreadAt] = useState<number | null>(null);
+  // Re-render once a minute so the cooldown countdown stays current
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(id);
+  }, []);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-  const { user, appLoaded, handleLogout } = useAuth(locale, setLocale);
-  const { saveLog } = useDrawLogger(locale);
+  const { user, session, appLoaded, handleLogout } = useAuth(locale, setLocale);
+  const { saveLog } = useDrawLogger(user);
 
   const slotsRef = useRef(slots);
   const questionRef = useRef(userQuestion);
@@ -74,10 +87,12 @@ export default function ThreeCardSpread() {
   const activeSlotIndex = slots.findIndex(s => s.cardName === null);
   const isAllDrawn = activeSlotIndex === -1;
 
-  const { completion, complete, error, isLoading } = useCompletion({
+  const { completion, complete, error, isLoading, setCompletion } = useCompletion({
     api: "/api/tarot",
     streamProtocol: "text",
     onError: async (err) => {
+      // Hitting the daily limit is expected, not a crash — don't log it
+      if (err.message?.startsWith(DAILY_LIMIT_MARKER)) return;
       await saveLog({
         spreadType: "trinity",
         cardName: slotsRef.current[0]?.cardName || "愚者",
@@ -88,11 +103,74 @@ export default function ThreeCardSpread() {
     },
     // Successful readings are saved by /api/tarot (spread_type "trinity" + spread_data),
     // which is also what the server-side daily limit counts.
+    onFinish: (_, result) => {
+      if (result.length > 10 && !result.includes("[Ritual interrupted]") && !result.includes("【魔法阵崩溃】")) {
+        setUsedToday((n) => n + 1);
+        setLastSpreadAt(Date.now());
+        setNow(Date.now());
+      }
+    },
   });
 
+  // On load: count today's three-card readings and restore the latest one,
+  // so a refresh doesn't lose the result (and doesn't tempt a second paid call).
+  useEffect(() => {
+    if (!user || restoredRef.current) return;
+    restoredRef.current = true;
+    (async () => {
+      const startOfToday = new Date();
+      startOfToday.setHours(0, 0, 0, 0);
+      const [todayRes, latestRes] = await Promise.all([
+        // today's count (daily limit)
+        supabase.from("DrawLog").select("id", { count: "exact", head: true })
+          .eq("user_id", user.id).eq("spread_type", "trinity")
+          .not("ai_reading", "ilike", "[HIDDEN_ERROR]%")
+          .gte("created_at", startOfToday.toISOString()),
+        // latest reading, any day (cooldown can span midnight)
+        supabase.from("DrawLog").select("*")
+          .eq("user_id", user.id).eq("spread_type", "trinity")
+          .not("ai_reading", "ilike", "[HIDDEN_ERROR]%")
+          .order("created_at", { ascending: false }).limit(1),
+      ]);
+      if (todayRes.error || latestRes.error) return;
+      setUsedToday(todayRes.count ?? 0);
+
+      const latest = latestRes.data?.[0];
+      if (!latest) return;
+      const latestAt = new Date(latest.created_at).getTime();
+      setLastSpreadAt(latestAt);
+
+      // Restore it if it's from today or still within the cooldown window
+      const stillRelevant = latestAt >= startOfToday.getTime() || Date.now() - latestAt < SPREAD_COOLDOWN_MS;
+      const cards = Array.isArray(latest.spread_data) ? latest.spread_data : null;
+      if (!stillRelevant || !cards || cards.length !== INITIAL_SLOTS.length) return;
+      setSlots(INITIAL_SLOTS.map((slot, i) => ({
+        ...slot,
+        cardName: cards[i].name,
+        isReversed: !!cards[i].is_reversed,
+        isFlipped: true,
+      })));
+      setUserQuestion(latest.question || "");
+      setIsSelecting(false);
+      setAppStage("reading");
+      setCompletion(latest.ai_reading || "");
+    })();
+  }, [user, setCompletion]);
+
+  const remainingToday = Math.max(0, DAILY_LIMITS.trinity - usedToday);
+  const cooldownLeftMs = lastSpreadAt ? lastSpreadAt + SPREAD_COOLDOWN_MS - now : 0;
+
+  const resetSpread = () => {
+    setSlots(INITIAL_SLOTS.map((s) => ({ ...s })));
+    setUserQuestion("");
+    setCompletion("");
+    setIsSelecting(true);
+    setAppStage("asking");
+  };
+
   // Every API call carries the Supabase access token; the server verifies it and enforces the daily limit
-  const completeWithAuth = async (prompt: string, options: { body: object }) => {
-    const { data: { session } } = await supabase.auth.getSession();
+  const completeWithAuth = (prompt: string, options: { body: object }) => {
+    // Token comes from useAuth state (kept fresh by onAuthStateChange) — no getSession() round-trip
     const headers: Record<string, string> = session ? { Authorization: `Bearer ${session.access_token}` } : {};
     return complete(prompt, { ...options, headers });
   };
@@ -164,8 +242,8 @@ export default function ThreeCardSpread() {
     const basePrompt = t(locale, "readSpreadPrompt" as any);
     
     const fullPrompt = locale === "zh" 
-      ? `${basePrompt}\n\n占卜问题：${userQuestion.trim()}\n\n圣三角牌阵抽卡结果如下：\n${cardsDescription}\n\n请结合以上时空脉络，为求问者提供深度、复合、连贯的整体神谕破译。`
-      : `${basePrompt}\n\nQuestion: ${userQuestion.trim()}\n\nThree-Card Spread Results:\n${cardsDescription}\n\nPlease provide a deep, coherent, and combined oracle interpretation based on this timeline.`;
+      ? `${basePrompt}\n\n占卜问题：${userQuestion.trim()}\n\n圣三角牌阵抽卡结果如下：\n${cardsDescription}\n\n请将三张牌的能量编织为一个整体，为求问者提供深度、连贯的神谕破译。`
+      : `${basePrompt}\n\nQuestion: ${userQuestion.trim()}\n\nThree-Card Spread Results:\n${cardsDescription}\n\nPlease weave the three cards into one deep, coherent oracle interpretation.`;
 
     void completeWithAuth(fullPrompt, { 
       body: { 
@@ -188,7 +266,9 @@ export default function ThreeCardSpread() {
     ? t(locale, "readingLoading" as any)
     : slots.every(s => s.isFlipped) && completion && !isEnergyRecoveryBlock(completion)
       ? t(locale, "readingDone" as any)
-      : t(locale, "readingWait" as any);
+      : slots.every(s => s.isFlipped)
+        ? t(locale, "readingRevealed")
+        : t(locale, "readingWait" as any);
 
   // Pre-written meanings for each slot once all three cards are face up
   const spreadMeanings = slots.every(s => s.isFlipped && s.cardName)
@@ -253,7 +333,7 @@ export default function ThreeCardSpread() {
                   {locale === "zh" ? "圣三角神谕" : "Holy Trinity Spread"}
                 </h1>
                 <p className="text-sm leading-relaxed text-zinc-500">
-                  {locale === "zh" ? "探寻【过去、现在、未来】的时空纠缠" : "Uncover the timeline entanglements of Past, Present, and Future"}
+                  {locale === "zh" ? "让三张牌交织出你此刻的命运图景" : "Let three cards weave the shape of your fate"}
                 </p>
               </div>
               <div className="w-full space-y-8">
@@ -301,8 +381,8 @@ export default function ThreeCardSpread() {
                           isFlipped={slot.isFlipped}
                           onClick={() => {
                             if (slot.isFlipped || isSelecting) return;
-                            const updated = [...slots];
-                            updated[idx].isFlipped = true;
+                            // Copy the slot instead of mutating state in place
+                            const updated = slots.map((s, i) => (i === idx ? { ...s, isFlipped: true } : s));
                             setSlots(updated);
 
                             if (updated.every(s => s.isFlipped)) {
@@ -326,7 +406,8 @@ export default function ThreeCardSpread() {
                 completion={completion}
                 isLoading={isLoading}
                 error={error}
-                isErrorState={!!error}
+                isErrorState={!!error && !isDailyLimitError(error)}
+                notice={error && isDailyLimitError(error) ? dailyLimitMessage(error) : undefined}
                 placeholderText={
                   isLoading 
                     ? "" 
@@ -342,6 +423,47 @@ export default function ThreeCardSpread() {
                 onRetry={() => triggerSpreadAIReading(slots)}
                 question={userQuestion.trim() || undefined}
                 meanings={spreadMeanings}
+                onEditQuestion={isSelecting && slots.every(s => !s.cardName) ? () => setAppStage("asking") : undefined}
+                footer={
+                  // All cards face up but no reading yet (request never fired or came back empty): let the user ask for it
+                  appStage === "reading" && slots.every(s => s.isFlipped) && !isLoading && !completion && !error ? (
+                    <button
+                      type="button"
+                      onClick={() => triggerSpreadAIReading(slots)}
+                      className="rounded-full border border-amber-400/40 px-6 py-2.5 text-xs tracking-[0.15em] text-amber-200 transition-colors hover:bg-amber-500/10"
+                    >
+                      🔮 {t(locale, "getReading")}
+                    </button>
+                  ) : appStage === "reading" && slots.every(s => s.isFlipped) && !isLoading && (completion || error) ? (
+                    remainingToday > 0 && cooldownLeftMs > 0 ? (
+                      <CooldownRing
+                        endsAt={lastSpreadAt! + SPREAD_COOLDOWN_MS}
+                        totalMs={SPREAD_COOLDOWN_MS}
+                        onDone={() => setNow(Date.now())}
+                      >
+                        {(left) => (
+                          <>
+                            {cooldownMessage(left, locale)}
+                            <br />
+                            <span className="text-zinc-600">
+                              {locale === "zh" ? `今日尚余 ${remainingToday} 次叩问` : `${remainingToday} left today`}
+                            </span>
+                          </>
+                        )}
+                      </CooldownRing>
+                    ) : remainingToday > 0 ? (
+                      <button
+                        type="button"
+                        onClick={resetSpread}
+                        className="rounded-full border border-violet-500/40 px-6 py-2.5 text-xs tracking-[0.15em] text-violet-300 transition-colors hover:bg-violet-500/10"
+                      >
+                        {t(locale, "drawAgain")} · {locale === "zh" ? `${t(locale, "remainingToday")} ${remainingToday} 次` : `${remainingToday} ${t(locale, "remainingToday")}`}
+                      </button>
+                    ) : (
+                      <span className="text-xs text-zinc-500">{t(locale, "spreadLimitReached")}</span>
+                    )
+                  ) : undefined
+                }
               />
             </motion.div>
           )}

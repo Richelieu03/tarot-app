@@ -23,6 +23,10 @@ interface ReadingBoxProps {
   showAiSection?: boolean;
   /** Rendered at the bottom of the box (e.g. login call-to-action) */
   footer?: ReactNode;
+  /** Calm informational message (e.g. daily limit reached); replaces the error/retry UI */
+  notice?: string;
+  /** When set, shows an "edit" link next to the question (only before any card is drawn) */
+  onEditQuestion?: () => void;
 }
 
 export default function ReadingBox({
@@ -39,6 +43,8 @@ export default function ReadingBox({
   meanings,
   showAiSection = true,
   footer,
+  notice,
+  onEditQuestion,
 }: ReadingBoxProps) {
   const hasMeanings = !!meanings && meanings.length > 0;
   return (
@@ -53,9 +59,25 @@ export default function ReadingBox({
         </div>
         
         {/* 问题回显 */}
-        {question && (
+        {(question || onEditQuestion) && (
           <p className="mb-4 text-left text-xs leading-6 text-zinc-500">
-            {t(locale, "yourQuestion")}：<span className="text-zinc-300">{question}</span>
+            {question ? (
+              <>
+                {t(locale, "yourQuestion")}{locale === "zh" ? "：" : ": "}
+                <span className="text-zinc-300">{question}</span>
+              </>
+            ) : (
+              <span>{t(locale, "noQuestion")}</span>
+            )}
+            {onEditQuestion && (
+              <button
+                type="button"
+                onClick={onEditQuestion}
+                className="ml-3 text-violet-400/80 underline underline-offset-4 transition-colors hover:text-violet-300"
+              >
+                {question ? t(locale, "editQuestion") : t(locale, "addQuestion")}
+              </button>
+            )}
           </p>
         )}
 
@@ -79,10 +101,12 @@ export default function ReadingBox({
           </div>
         )}
 
-        {/* 文本内容区 */}
-        {showAiSection && (
+        {/* 文本内容区 — skipped entirely when there is nothing to show (avoids a big empty gap) */}
+        {showAiSection && (notice || isErrorState || completion || isLoading || placeholderText) && (
         <div className="min-h-[120px] text-left font-serif text-[15px] italic leading-8 text-zinc-200 whitespace-pre-wrap flex flex-col justify-between">
-          {isErrorState ? (
+          {notice ? (
+            <p className="font-sans text-sm not-italic text-amber-300/80">🌙 {notice}</p>
+          ) : isErrorState ? (
             <div className="flex flex-col items-start text-sm text-red-400/80 font-sans not-italic">
               <p>
                 {locale === "zh" 

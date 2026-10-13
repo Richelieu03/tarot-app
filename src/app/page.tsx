@@ -22,6 +22,7 @@ import ReadingBox from "../components/ReadingBox";
 import SpreadSelector from "../components/SpreadSelector";
 import { getAvatarColor, getInitial } from "../lib/utils";
 import { getCardMeaning } from "../lib/tarot-meanings";
+import { DAILY_LIMIT_MARKER, dailyLimitMessage, isDailyLimitError } from "../lib/daily-limit";
 
 type AppStage = "asking" | "selecting" | "reading";
 
@@ -42,7 +43,7 @@ export default function Home() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showAuthOverlay, setShowAuthOverlay] = useState(false);
 
-  const { user, appLoaded, todayCloudLog, handleLogout } = useAuth(locale, setLocale);
+  const { user, session, appLoaded, todayCloudLog, handleLogout } = useAuth(locale, setLocale);
 
   useEffect(() => {
     document.documentElement.lang = locale === "zh" ? "zh-CN" : "en";
@@ -60,6 +61,8 @@ export default function Home() {
     api: "/api/tarot",
     streamProtocol: "text",
     onError: async (err) => {
+      // Hitting the daily limit is expected, not a crash — don't log it
+      if (err.message?.startsWith(DAILY_LIMIT_MARKER)) return;
       const { data: { user: cu } } = await supabase.auth.getUser();
       if (!cu) return;
       await supabase.from('DrawLog').insert([{
@@ -82,8 +85,8 @@ export default function Home() {
   });
 
   // Every API call carries the Supabase access token; the server verifies it and enforces the daily limit
-  const completeWithAuth = async (prompt: string, options: { body: object }) => {
-    const { data: { session } } = await supabase.auth.getSession();
+  const completeWithAuth = (prompt: string, options: { body: object }) => {
+    // Token comes from useAuth state (kept fresh by onAuthStateChange) — no getSession() round-trip
     const headers: Record<string, string> = session ? { Authorization: `Bearer ${session.access_token}` } : {};
     return complete(prompt, { ...options, headers });
   };
@@ -318,7 +321,7 @@ export default function Home() {
                   completion={completion}
                   isLoading={isLoading}
                   error={error}
-                  isErrorState={!!error || completion.includes("[HIDDEN_ERROR]") || completion.includes("【魔法阵崩溃】") || completion.includes("[Ritual interrupted]") || completion.includes("能量正在恢复中")}
+                  isErrorState={(!!error && !isDailyLimitError(error)) || completion.includes("[HIDDEN_ERROR]") || completion.includes("【魔法阵崩溃】") || completion.includes("[Ritual interrupted]") || completion.includes("能量正在恢复中")}
                   placeholderText={
                     isLoading 
                       ? "" 
@@ -333,6 +336,8 @@ export default function Home() {
                   className={appStage === "reading" ? "-mt-10" : "mt-10"}
                   question={userQuestion.trim() || undefined}
                   meanings={meanings}
+                  onEditQuestion={isSelecting ? () => setAppStage("asking") : undefined}
+                  notice={error && isDailyLimitError(error) ? dailyLimitMessage(error) : undefined}
                   showAiSection={!!user || !flipped}
                   footer={!user && flipped ? (
                     <button

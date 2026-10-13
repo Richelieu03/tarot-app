@@ -4,11 +4,9 @@
 
 import { useState } from "react";
 import { supabase } from "../lib/supabase";
-import { useAuth } from "../hooks/useAuth";
-import type { Locale } from "../lib/locale";
+import type { User } from "@supabase/supabase-js";
 
-export function useDrawLogger(locale: Locale) {
-  const { user } = useAuth(locale, () => {});
+export function useDrawLogger(user: User | null) {
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 

@@ -3,11 +3,8 @@ import { createClient } from "@supabase/supabase-js";
 import type { Locale } from "../../../lib/locale";
 import { getCardDisplayName } from "../../../lib/tarot-labels";
 import { TAROT_DECK } from "../../../lib/tarot-deck";
-
-// Server-side daily quota per spread type (successful readings per user per local day).
-// The client also limits this, but only this check actually protects the API key.
-const DAILY_LIMITS = { single: 1, trinity: 3 } as const;
-type SpreadType = keyof typeof DAILY_LIMITS;
+// Daily quota per spread type. The client also limits this, but only this server check protects the API key.
+import { DAILY_LIMITS, DAILY_LIMIT_MARKER, SPREAD_COOLDOWN_MS, cooldownMessage, type SpreadType } from "../../../lib/daily-limit";
 
 const MAX_QUESTION_LENGTH = 500;
 const DECK_SET = new Set<string>(TAROT_DECK);
@@ -114,10 +111,27 @@ export async function POST(req: Request) {
     return textResponse(locale === "zh" ? "服务暂时不可用，请稍后再试。" : "Service unavailable, please try again later.", 503);
   }
   if ((count ?? 0) >= DAILY_LIMITS[spreadType]) {
-    return textResponse(
-      locale === "zh" ? "今日的神谕次数已用完，请明天再来。" : "You've used today's readings. Come back tomorrow.",
-      429,
-    );
+    const msg = spreadType === "single"
+      ? (locale === "zh" ? "今日的神谕已然降临，命运之门将于明日重新开启。" : "Today's oracle has spoken. The gate reopens tomorrow.")
+      : (locale === "zh" ? "今日的三次叩问已尽，待明日星辰重新排列，再来聆听。" : "Today's three questions have been asked. Return when the stars realign tomorrow.");
+    return textResponse(`${DAILY_LIMIT_MARKER} ${msg}`, 429);
+  }
+
+  // ── Three-card cooldown: at least SPREAD_COOLDOWN_MS between readings (not reset at midnight) ──
+  if (spreadType === "trinity") {
+    const { data: last } = await db
+      .from("DrawLog")
+      .select("created_at")
+      .eq("user_id", user.id)
+      .eq("spread_type", "trinity")
+      .not("ai_reading", "ilike", "[HIDDEN_ERROR]%")
+      .order("created_at", { ascending: false })
+      .limit(1);
+    const lastAt = last?.[0]?.created_at ? new Date(last[0].created_at).getTime() : 0;
+    const waitMs = lastAt + SPREAD_COOLDOWN_MS - Date.now();
+    if (waitMs > 0) {
+      return textResponse(`${DAILY_LIMIT_MARKER} ${cooldownMessage(waitMs, locale)}`, 429);
+    }
   }
 
   try {
@@ -252,7 +266,12 @@ Output the final reading text directly:`
       generationConfig: { thinkingConfig: { thinkingBudget: 0 } } as Record<string, unknown>,
     });
     const result = await model.generateContent(systemPrompt);
-    const fullText = result.response.text();
+    const fullText = result.response.text().trim();
+    // An empty answer (e.g. blocked by safety filters) must not be stored, or it would
+    // use up the user's daily quota and be "restored" as a blank reading.
+    if (!fullText) {
+      return textResponse(locale === "zh" ? "【魔法阵崩溃】神谕没有回应，请重试。" : "[Ritual interrupted]\nThe oracle gave no answer. Please try again.");
+    }
 
     // Record the reading server-side: this row is what the daily quota counts,
     // so it must not depend on the browser finishing the stream.

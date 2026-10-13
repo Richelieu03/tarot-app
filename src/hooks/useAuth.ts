@@ -8,6 +8,9 @@ import type { Locale } from "../lib/locale";
 
 export function useAuth(locale: Locale, setLocale: (l: Locale) => void) {
   const [user, setUser] = useState<User | null>(null);
+  // Kept in state so API calls can use the token without calling getSession(),
+  // which can hang if the auth lock is held (see onAuthStateChange below)
+  const [session, setSession] = useState<Session | null>(null);
   const [appLoaded, setAppLoaded] = useState(false);
   const [todayCloudLog, setTodayCloudLog] = useState<any>(null);
 
@@ -43,6 +46,7 @@ export function useAuth(locale: Locale, setLocale: (l: Locale) => void) {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       const currentUser = session?.user ?? null;
       setUser(currentUser);
+      setSession(session);
       
       if (currentUser) {
         if (currentUser.user_metadata?.locale) {
@@ -55,17 +59,23 @@ export function useAuth(locale: Locale, setLocale: (l: Locale) => void) {
     });
 
     // Auth status change listener
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    // NOTE: this callback must stay synchronous. Awaiting another Supabase call inside it
+    // deadlocks supabase-js's auth lock, after which getSession() never resolves.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event: AuthChangeEvent, session: Session | null) => {
       const currentUser = session?.user ?? null;
       setUser(currentUser);
-      
+      setSession(session);
+
       if (currentUser) {
         if (currentUser.user_metadata?.locale) {
           setLocale(currentUser.user_metadata.locale as Locale);
         }
         if (event === "SIGNED_IN" || event === "INITIAL_SESSION") {
-          const log = await checkCloudDrawStatus(currentUser.id);
-          if (log) setTodayCloudLog(log);
+          // Defer the DB query until after the auth callback has returned
+          setTimeout(async () => {
+            const log = await checkCloudDrawStatus(currentUser.id);
+            if (log) setTodayCloudLog(log);
+          }, 0);
         }
       }
     });
@@ -82,6 +92,7 @@ export function useAuth(locale: Locale, setLocale: (l: Locale) => void) {
     }
     
     setUser(null);
+    setSession(null);
     setTodayCloudLog(null);
     
     // clear localStorage to remove any cached data related to the user
@@ -89,5 +100,5 @@ export function useAuth(locale: Locale, setLocale: (l: Locale) => void) {
     
   };
 
-  return { user, appLoaded, todayCloudLog, handleLogout };
+  return { user, session, appLoaded, todayCloudLog, handleLogout };
 }
