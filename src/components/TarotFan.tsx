@@ -18,10 +18,14 @@ export default function TarotFan({
   onSelectCard,
 }: TarotFanProps) {
   const [isMobile, setIsMobile] = useState(false);
+  const [viewportW, setViewportW] = useState(375);
 
   // 监听屏幕宽度
   useEffect(() => {
-    const checkMobile = () => setIsMobile(window.innerWidth < 640);
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 640);
+      setViewportW(window.innerWidth);
+    };
     checkMobile();
     window.addEventListener("resize", checkMobile);
     return () => window.removeEventListener("resize", checkMobile);
@@ -30,6 +34,20 @@ export default function TarotFan({
   if (!isOpen || !isSelecting) return null;
 
   const totalCards = 56; // 👑 史诗级 56张小阿尔卡纳全牌组
+
+  // Mobile geometry: derive card spacing from the actual screen width so the whole arc fits.
+  // Fan width = spread of card centres + one card width + the sideways lean of the outer
+  // cards (they rotate around their bottom edge, so their tops swing outwards).
+  const MOBILE_CARD_W = 68;
+  const MOBILE_CARD_H = 115;
+  const MOBILE_ROTATE_STEP = 0.5; // degrees per card
+  const MOBILE_SIDE_MARGIN = 20;  // breathing room on each side of the screen
+  const halfSpan = (totalCards - 1) / 2;
+  const outerLean = MOBILE_CARD_H * Math.sin((halfSpan * MOBILE_ROTATE_STEP * Math.PI) / 180);
+  const mobileStep = Math.max(
+    2,
+    Math.min(7, (viewportW - 2 * MOBILE_SIDE_MARGIN - MOBILE_CARD_W - 2 * outerLean) / (totalCards - 1)),
+  );
 
   return (
     // 🌟 1. 调整容器高度，手机端高 160px（给放大的牌留出空间），电脑端保持 220px
@@ -46,14 +64,14 @@ export default function TarotFan({
           // 🌟 2. 手机端 56张牌美化几何算法（解决“太小不好看”的核心）
           // 手机端：让牌堆形成一个紧密的双排交错折扇结构
           // 偏转角度在手机上微调为 0.8度，让整体弧度更柔和
-          const rotateAngle = offset * (isMobile ? 0.8 : 1.2); 
+          const rotateAngle = offset * (isMobile ? MOBILE_ROTATE_STEP : 1.2); 
           
           // 🌟 3. 手机端横向错开距离调大到 7px（之前是 5.5px，太挤了）。
           // 55 * 7 = 385px，这刚好是一个主流手机屏幕的宽度极限。
-          const translateX = offset * (isMobile ? 7 : 17);   
+          const translateX = offset * (isMobile ? mobileStep : 17);   
           
           // 纵向弧度微调，手机端让两边微微向下，形成优雅的重叠感
-          const translateY = Math.abs(offset) * (isMobile ? 0.8 : 0.7); 
+          const translateY = Math.abs(offset) * (isMobile ? 0.5 : 0.7); 
 
           return (
             <motion.div

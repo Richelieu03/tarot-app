@@ -260,7 +260,9 @@ export default function ThreeCardSpread() {
 
   const subtitleMain = isSelecting
     ? `${t(locale, "subtitleSelecting" as any)} (${slots.filter(s => s.cardName).length} / 3)`
-    : t(locale, "subtitleAfterSelect" as any);
+    : slots.every(s => s.isFlipped)
+      ? t(locale, "spreadRevealed")
+      : t(locale, "subtitleAfterSelect" as any);
 
   const readingStatusLabel = isLoading
     ? t(locale, "readingLoading" as any)
@@ -355,14 +357,14 @@ export default function ThreeCardSpread() {
             </motion.div>
           ) : (
             <motion.div key="three-flow" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} className="flex w-full flex-col items-center">
-              <h1 className="mt-12 text-2xl font-semibold tracking-tight text-zinc-100 sm:text-3xl">
+              <h1 className="mt-12 max-sm:mt-20 text-2xl font-semibold tracking-tight text-zinc-100 sm:text-3xl">
                 {locale === "zh" ? "圣三角时空星盘" : "Three-Card Astral Matrix"}
               </h1>
               <p className="mt-3 text-sm text-zinc-400">{subtitleMain}</p>
 
               {/* 全景三牌阵槽位展示区 */}
               {(slots.some(s => s.cardName !== null) || !isSelecting) && (
-                <div className="my-8 flex flex-wrap items-start justify-center gap-6 sm:gap-10 w-full px-2">
+                <div className="my-8 flex flex-wrap max-md:flex-nowrap items-start justify-center gap-6 max-md:gap-2 sm:gap-10 w-full px-2">
                   {slots.map((slot, idx) => {
                     if (!slot.cardName) return null;
                     return (
@@ -372,6 +374,7 @@ export default function ThreeCardSpread() {
                         </span>
                         
                         <TarotCard
+                          sizeClassName="w-[250px] max-md:w-[27vw]"
                           layoutId={`three-card-${slot.id}`}
                           cardName={slot.cardName}
                           cardLabel={getCardDisplayName(slot.cardName, locale)}

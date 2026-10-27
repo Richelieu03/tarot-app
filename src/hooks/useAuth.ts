@@ -43,7 +43,14 @@ export function useAuth(locale: Locale, setLocale: (l: Locale) => void) {
 
   useEffect(() => {
     // initial check for existing session and user
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session }, error }) => {
+      // A stale session left in localStorage (refresh token revoked or expired) makes
+      // supabase-js throw "Invalid Refresh Token" on every load. Clear it locally and continue as a guest.
+      if (error) {
+        console.warn("Stale Supabase session cleared:", error.message);
+        await supabase.auth.signOut({ scope: "local" });
+        session = null;
+      }
       const currentUser = session?.user ?? null;
       setUser(currentUser);
       setSession(session);

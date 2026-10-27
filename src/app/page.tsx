@@ -284,7 +284,7 @@ export default function Home() {
             </motion.div>
           ) : (
             <motion.div key="spread-flow" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} className="flex w-full flex-col items-center">
-              <h1 className="mt-10 text-2xl font-semibold tracking-tight text-zinc-100 sm:text-4xl">{t(locale, "title")}</h1>
+              <h1 className="mt-10 max-sm:mt-20 text-2xl font-semibold tracking-tight text-zinc-100 sm:text-4xl">{t(locale, "title")}</h1>
               <p className="mt-4 text-sm text-zinc-400">{subtitleMain}</p>
 
               <div className="my-3 flex items-center justify-center ">

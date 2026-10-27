@@ -15,6 +15,7 @@ interface TarotCardProps {
   layoutId?: string;         // 用于跨页面平滑飞入的动画 ID
   onClick?: () => void;      // 点击事件
   disabled?: boolean;        // 是否禁用点击
+  sizeClassName?: string;    // width classes; height follows from the 25:43 aspect ratio
 }
 
 export default function TarotCard({
@@ -27,9 +28,10 @@ export default function TarotCard({
   layoutId,
   onClick,
   disabled = false,
+  sizeClassName = "w-[250px] max-md:w-[140px]",
 }: TarotCardProps) {
   return (
-    <div className="w-[250px] max-md:w-[140px] aspect-[25/43] flex items-center justify-center [perspective:1200px]">
+    <div className={`${sizeClassName} aspect-[25/43] flex items-center justify-center [perspective:1200px]`}>
       <motion.div
         layoutId={layoutId}
         onClick={!disabled ? onClick : undefined}
