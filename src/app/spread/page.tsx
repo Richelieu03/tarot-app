@@ -25,6 +25,9 @@ import TarotFan from "../../components/TarotFan";
 import ReadingBox from "../../components/ReadingBox";
 import SpreadSelector from "../../components/SpreadSelector"; 
 import CooldownRing from "../../components/CooldownRing";
+import ShareCardButton from "../../components/ShareCardButton";
+import { makeExcerpt } from "../../lib/share-card";
+import type { ReactNode } from "react";
 
 type AppStage = "asking" | "selecting" | "reading";
 
@@ -280,6 +283,33 @@ export default function ThreeCardSpread() {
       }))
     : undefined;
 
+  // Share button sits above whatever footer action is showing, once the reading is in
+  const hasReading = slots.every(s => s.isFlipped && s.cardName) && !!completion && !error && !isLoading
+    && !completion.includes("【魔法阵崩溃】") && !completion.includes("[Ritual interrupted]");
+  const withShare = (main: ReactNode) => {
+    if (!hasReading) return main || undefined;
+    return (
+      <div className="flex flex-col items-center gap-5">
+        <ShareCardButton
+          locale={locale}
+          getInput={() => ({
+            locale,
+            kind: t(locale, "shareKindSpread"),
+            cards: slots.map(s => ({
+              name: s.cardName!,
+              label: getCardDisplayName(s.cardName!, locale),
+              orientation: s.isReversed ? t(locale, "reversed") : t(locale, "upright"),
+              reversed: s.isReversed,
+            })),
+            question: userQuestion.trim() || undefined,
+            excerpt: makeExcerpt(completion, locale === "zh" ? 100 : 220),
+          })}
+        />
+        {main}
+      </div>
+    );
+  };
+
   if (!appLoaded) return <div className="min-h-screen bg-[#05030a]" />;
   
   // 🌟 未登录直接由开箱即用的 AuthWall 完美接管（自带毛玻璃与点击 X 返回主页）
@@ -427,7 +457,7 @@ export default function ThreeCardSpread() {
                 question={userQuestion.trim() || undefined}
                 meanings={spreadMeanings}
                 onEditQuestion={isSelecting && slots.every(s => !s.cardName) ? () => setAppStage("asking") : undefined}
-                footer={
+                footer={withShare(
                   // All cards face up but no reading yet (request never fired or came back empty): let the user ask for it
                   appStage === "reading" && slots.every(s => s.isFlipped) && !isLoading && !completion && !error ? (
                     <button
@@ -466,7 +496,7 @@ export default function ThreeCardSpread() {
                       <span className="text-xs text-zinc-500">{t(locale, "spreadLimitReached")}</span>
                     )
                   ) : undefined
-                }
+                )}
               />
             </motion.div>
           )}

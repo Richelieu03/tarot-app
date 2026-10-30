@@ -1,7 +1,10 @@
 // Shared between the API route (enforcement) and the pages (UI).
 
-/** Successful AI readings allowed per user per local day, by spread type */
-export const DAILY_LIMITS = { single: 1, trinity: 3 } as const;
+/**
+ * Successful AI readings allowed per user per local day, by DrawLog.spread_type:
+ *   daily = 每日一牌, single = 单牌问答, trinity = 圣三角
+ */
+export const DAILY_LIMITS = { daily: 1, single: 3, trinity: 3 } as const;
 export type SpreadType = keyof typeof DAILY_LIMITS;
 
 /** Minimum gap between two three-card readings (tarot tradition: don't re-ask the cards in quick succession) */

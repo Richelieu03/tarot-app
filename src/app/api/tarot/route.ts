@@ -25,6 +25,8 @@ interface TarotRequestBody {
   // 牌阵字段
   isSpread?: boolean;
   spreadData?: SpreadSlot[];
+  // "daily" (每日一牌) or "single" (单牌问答); ignored for spreads
+  mode?: unknown;
   // Browser's Date#getTimezoneOffset(), used to decide where "today" starts
   tzOffset?: unknown;
 }
@@ -91,9 +93,11 @@ export async function POST(req: Request) {
 
   // ── Validate input before spending anything ──
   const spreadType: SpreadType =
-    body.isSpread && Array.isArray(body.spreadData) && body.spreadData.length > 0 ? "trinity" : "single";
+    body.isSpread && Array.isArray(body.spreadData) && body.spreadData.length > 0
+      ? "trinity"
+      : body.mode === "daily" ? "daily" : "single";
   const slots = spreadType === "trinity" ? body.spreadData!.slice(0, 3) : [];
-  if (spreadType === "single" ? !isValidCard(body.cardName) : !slots.every((s) => isValidCard(s.cardName))) {
+  if (spreadType !== "trinity" ? !isValidCard(body.cardName) : !slots.every((s) => isValidCard(s.cardName))) {
     return textResponse("Invalid card", 400);
   }
   const questionRaw = (typeof body.question === "string" ? body.question.trim() : "").slice(0, MAX_QUESTION_LENGTH);
@@ -111,7 +115,7 @@ export async function POST(req: Request) {
     return textResponse(locale === "zh" ? "服务暂时不可用，请稍后再试。" : "Service unavailable, please try again later.", 503);
   }
   if ((count ?? 0) >= DAILY_LIMITS[spreadType]) {
-    const msg = spreadType === "single"
+    const msg = spreadType === "daily"
       ? (locale === "zh" ? "今日的神谕已然降临，命运之门将于明日重新开启。" : "Today's oracle has spoken. The gate reopens tomorrow.")
       : (locale === "zh" ? "今日的三次叩问已尽，待明日星辰重新排列，再来聆听。" : "Today's three questions have been asked. Return when the stars realign tomorrow.");
     return textResponse(`${DAILY_LIMIT_MARKER} ${msg}`, 429);
@@ -229,13 +233,20 @@ Output the final reading text directly:`
         ? `求问者抽到了宿命卡牌：${cardStr}。`
         : `The querent drew a single destiny card: ${cardStr}.`;
 
-      taskInstruction = locale === "zh"
-        ? `请仔细考虑该牌在此正逆位状态下的深层含义。用神秘、简洁的语气，撰写一段大约 150 字的运势解读，给出具体的建议。`
-        : `Honor the specific upright/reversed orientation. In a secretive, concise tone, write about 100 words of guidance and give one concrete suggestion.`;
+      taskInstruction = spreadType === "daily"
+        // 每日一牌: today's fortune, no question
+        ? (locale === "zh"
+          ? `这是求问者今天的每日一牌。请结合该牌在此正逆位状态下的含义，解读TA今天的整体能量、需要留意的地方，并给出一个今天就能做到的具体小建议。用神秘而温暖的语气，约 150 字。`
+          : `This is the querent's daily card. Honor the upright/reversed orientation and describe today's overall energy, what to watch out for, and one small concrete thing to do today. Mystical yet warm tone, about 100 words.`)
+        : (locale === "zh"
+          ? `请仔细考虑该牌在此正逆位状态下的深层含义。用神秘、简洁的语气，撰写一段大约 150 字的运势解读，给出具体的建议。`
+          : `Honor the specific upright/reversed orientation. In a secretive, concise tone, write about 100 words of guidance and give one concrete suggestion.`);
     }
 
     // 4. 处理用户提问模块
-    const questionContext = questionRaw
+    const questionContext = spreadType === "daily"
+      ? (locale === "zh" ? "这是每日一牌，没有具体问题，请聚焦于今天。" : "This is a daily card with no specific question — focus on today.")
+      : questionRaw
       ? (locale === "zh" 
           ? `求问者心中渴望洞察的困惑是：「${questionRaw}」。请严格锚定此问题进行解牌。`
           : `The querent's guiding question is: "${questionRaw}". Stay strictly anchored to this question.`)
@@ -276,10 +287,10 @@ Output the final reading text directly:`
     // Record the reading server-side: this row is what the daily quota counts,
     // so it must not depend on the browser finishing the stream.
     const { error: insertError } = await db.from("DrawLog").insert([
-      spreadType === "single"
+      spreadType !== "trinity"
         ? {
             user_id: user.id,
-            spread_type: "single",
+            spread_type: spreadType,
             card_name: body.cardName,
             is_reversed: !!body.isReversed,
             question: questionRaw,

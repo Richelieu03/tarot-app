@@ -6,7 +6,8 @@ import type { User, Session, AuthChangeEvent } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
 import type { Locale } from "../lib/locale";
 
-export function useAuth(locale: Locale, setLocale: (l: Locale) => void) {
+/** `restoreType`: which DrawLog.spread_type to restore as todayCloudLog ("daily" | "single") */
+export function useAuth(locale: Locale, setLocale: (l: Locale) => void, restoreType: string = "daily") {
   const [user, setUser] = useState<User | null>(null);
   // Kept in state so API calls can use the token without calling getSession(),
   // which can hang if the auth lock is held (see onAuthStateChange below)
@@ -24,7 +25,7 @@ export function useAuth(locale: Locale, setLocale: (l: Locale) => void) {
         .from('DrawLog')
         .select('*')
         .eq('user_id', userId)
-        .eq('spread_type', 'single')
+        .eq('spread_type', restoreType)
         .gte('created_at', startOfToday.toISOString())
         .not('ai_reading', 'ilike', '[HIDDEN_ERROR]%')
         .order('created_at', { ascending: false })

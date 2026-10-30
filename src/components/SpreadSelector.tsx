@@ -5,11 +5,20 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import type { Locale } from "../lib/locale";
+import { t, type UiKey } from "../lib/ui-i18n";
+
+export type SpreadKind = "daily" | "single" | "three";
 
 interface SpreadSelectorProps {
-  currentSpread: "single" | "three";
+  currentSpread: SpreadKind;
   locale: Locale;
 }
+
+const OPTIONS: { kind: SpreadKind; href: string; icon: string; labelKey: UiKey }[] = [
+  { kind: "daily", href: "/", icon: "☀️", labelKey: "modeDaily" },
+  { kind: "single", href: "/single", icon: "🃏", labelKey: "modeQuestion" },
+  { kind: "three", href: "/spread", icon: "🔮", labelKey: "modeSpread" },
+];
 
 export default function SpreadSelector({ currentSpread, locale }: SpreadSelectorProps) {
   const router = useRouter();
@@ -27,6 +36,8 @@ export default function SpreadSelector({ currentSpread, locale }: SpreadSelector
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  const current = OPTIONS.find((o) => o.kind === currentSpread) ?? OPTIONS[0];
+
   // 当前激活状态的视觉样式皮肤配置
   const isThree = currentSpread === "three";
   const buttonClass = isThree
@@ -39,11 +50,7 @@ export default function SpreadSelector({ currentSpread, locale }: SpreadSelector
         onClick={() => setIsOpen(!isOpen)}
         className={`flex items-center gap-2 rounded-full border px-4 py-2.5 text-xs font-medium backdrop-blur-md transition-all shadow-md tracking-wider ${buttonClass}`}
       >
-        {isThree ? (
-          <span>🔮 {locale === "zh" ? "圣三角阵" : "Three-Card Spread"}</span>
-        ) : (
-          <span>🃏 {locale === "zh" ? "单牌神谕" : "Single Oracle"}</span>
-        )}
+        <span>{current.icon} {t(locale, current.labelKey)}</span>
         <motion.span
           animate={{ rotate: isOpen ? 180 : 0 }}
           transition={{ duration: 0.15 }}
@@ -60,44 +67,30 @@ export default function SpreadSelector({ currentSpread, locale }: SpreadSelector
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -6, scale: 0.96 }}
             transition={{ duration: 0.15 }}
-            className="absolute left-0 mt-2 w-40 rounded-xl border border-white/10 bg-black/85 p-1.5 backdrop-blur-xl shadow-2xl overflow-hidden z-[100]"
+            className="absolute left-0 mt-2 w-44 rounded-xl border border-white/10 bg-black/85 p-1.5 backdrop-blur-xl shadow-2xl overflow-hidden z-[100]"
           >
-            {/* 选项一：单牌神谕 */}
-            {currentSpread === "single" ? (
-              <button
-                disabled
-                className="w-full text-left rounded-lg px-3 py-2 text-xs bg-violet-500/10 text-violet-200 flex items-center justify-between cursor-default"
-              >
-                <div className="flex items-center gap-2"><span>🃏</span>{locale === "zh" ? "单牌神谕" : "Single"}</div>
-                <span className="text-[10px]">●</span>
-              </button>
-            ) : (
-              <button
-                onClick={() => { setIsOpen(false); router.push("/"); }}
-                className="w-full text-left rounded-lg px-3 py-2 text-xs text-zinc-400 hover:text-zinc-100 hover:bg-white/5 transition-colors flex items-center gap-2"
-              >
-                <span>🃏</span>
-                {locale === "zh" ? "单牌神谕" : "Single Oracle"}
-              </button>
-            )}
-
-            {/* 选项二：圣三角阵 */}
-            {currentSpread === "three" ? (
-              <button
-                disabled
-                className="w-full text-left rounded-lg px-3 py-2 text-xs bg-amber-500/10 text-amber-200 flex items-center justify-between cursor-default"
-              >
-                <div className="flex items-center gap-2"><span>🔮</span>{locale === "zh" ? "圣三角阵" : "Three-Card"}</div>
-                <span className="text-[10px]">●</span>
-              </button>
-            ) : (
-              <button
-                onClick={() => { setIsOpen(false); router.push("/spread"); }}
-                className="w-full text-left rounded-lg px-3 py-2 text-xs text-zinc-400 hover:text-zinc-100 hover:bg-white/5 transition-colors flex items-center gap-2"
-              >
-                <span>🔮</span>
-                {locale === "zh" ? "圣三角阵" : "Three-Card"}
-              </button>
+            {OPTIONS.map((o) =>
+              o.kind === currentSpread ? (
+                <button
+                  key={o.kind}
+                  disabled
+                  className={`w-full text-left rounded-lg px-3 py-2 text-xs flex items-center justify-between cursor-default ${
+                    o.kind === "three" ? "bg-amber-500/10 text-amber-200" : "bg-violet-500/10 text-violet-200"
+                  }`}
+                >
+                  <div className="flex items-center gap-2"><span>{o.icon}</span>{t(locale, o.labelKey)}</div>
+                  <span className="text-[10px]">●</span>
+                </button>
+              ) : (
+                <button
+                  key={o.kind}
+                  onClick={() => { setIsOpen(false); router.push(o.href); }}
+                  className="w-full text-left rounded-lg px-3 py-2 text-xs text-zinc-400 hover:text-zinc-100 hover:bg-white/5 transition-colors flex items-center gap-2"
+                >
+                  <span>{o.icon}</span>
+                  {t(locale, o.labelKey)}
+                </button>
+              ),
             )}
           </motion.div>
         )}

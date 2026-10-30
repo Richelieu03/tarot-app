@@ -104,6 +104,12 @@ export default function HistoryModal({ isOpen, onClose, isLoading, logs, locale 
                         <div className="flex items-center justify-between text-xs text-zinc-500 mb-2">
                           <span className="font-mono tracking-wider">{formatDate(log.created_at)}</span>
                           
+                          {/* 每日一牌 badge for single-card daily draws */}
+                          {!isMultiCard && log.spread_type === "daily" && (
+                            <span className="rounded-full px-2.5 py-0.5 text-[10px] tracking-widest font-medium border border-violet-400/30 bg-violet-400/10 text-violet-300">
+                              {locale === "zh" ? "每日一牌" : "Daily"}
+                            </span>
+                          )}
                           {/* 🌟 牌阵类型标签：多牌阵才显示独立 Badge */}
                           {isMultiCard && spreadBadgeLabel && (
                             <span className="rounded-full px-2.5 py-0.5 text-[10px] tracking-widest font-medium border border-amber-400/30 bg-amber-400/10 text-amber-300">
