@@ -8,6 +8,15 @@ import { useState } from "react";
 import { supabase } from "../lib/supabase"; 
 import HistoryModal from "./HistoryModal"; 
 import { getAvatarColor, getInitial } from "../lib/utils";
+import { t, type UiKey } from "../lib/ui-i18n";
+
+// Navigation shown under the history button
+const NAV_LINKS: { href: string; icon: string; labelKey: UiKey }[] = [
+  { href: "/", icon: "☀️", labelKey: "modeDaily" },
+  { href: "/single", icon: "🃏", labelKey: "modeQuestion" },
+  { href: "/spread", icon: "🔮", labelKey: "modeSpread" },
+  { href: "/cards", icon: "🗂️", labelKey: "modeLibrary" },
+];
 
 interface SidebarProps {
   isOpen: boolean;
@@ -139,14 +148,19 @@ export default function Sidebar({
                   {locale === "zh" ? "命运日志 (历史记录)" : "Destiny Log (History)"}
                 </button>
                 
-                <Link 
-                  href="/spread" 
-                  onClick={onClose} 
-                  className="w-full flex items-center gap-4 px-4 py-3.5 text-sm text-zinc-400 hover:text-zinc-100 hover:bg-white/5 rounded-2xl transition-all text-left group"
-                >
-                  <span className="text-lg group-hover:scale-110 transition-transform duration-300">🔮</span>
-                  {locale === "zh" ? "圣三角时空阵" : "Three-Card Spread"}
-                </Link>
+                <div className="my-3 border-t border-white/5" />
+
+                {NAV_LINKS.map((link) => (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    onClick={onClose}
+                    className="w-full flex items-center gap-4 px-4 py-3.5 text-sm text-zinc-400 hover:text-zinc-100 hover:bg-white/5 rounded-2xl transition-all text-left group"
+                  >
+                    <span className="text-lg group-hover:scale-110 transition-transform duration-300">{link.icon}</span>
+                    {t(locale, link.labelKey)}
+                  </Link>
+                ))}
               </div>
 
               {/* logout */}

@@ -98,7 +98,7 @@ export default function SpreadSelector({ currentSpread, locale }: SpreadSelector
               onClick={() => { track("mode_switch", { to: "library" }); setIsOpen(false); router.push("/cards"); }}
               className="w-full text-left rounded-lg px-3 py-2 text-xs text-zinc-400 hover:text-zinc-100 hover:bg-white/5 transition-colors flex items-center gap-2"
             >
-              <span>📖</span>
+              <span>🗂️</span>
               {t(locale, "modeLibrary")}
             </button>
           </motion.div>
