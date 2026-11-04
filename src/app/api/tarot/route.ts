@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import type { Locale } from "../../../lib/locale";
 import { getCardDisplayName } from "../../../lib/tarot-labels";
 import { TAROT_DECK } from "../../../lib/tarot-deck";
+import { profileToPrompt, sanitizeProfile } from "../../../lib/profile";
 // Daily quota per spread type. The client also limits this, but only this server check protects the API key.
 import { DAILY_LIMITS, DAILY_LIMIT_MARKER, SPREAD_COOLDOWN_MS, cooldownMessage, type SpreadType } from "../../../lib/daily-limit";
 
@@ -236,8 +237,14 @@ Output the final reading text directly:`
       taskInstruction = spreadType === "daily"
         // 每日一牌: today's fortune, no question
         ? (locale === "zh"
-          ? `这是求问者今天的每日一牌。请结合该牌在此正逆位状态下的含义，解读TA今天的整体能量、需要留意的地方，并给出一个今天就能做到的具体小建议。用神秘而温暖的语气，约 150 字。`
-          : `This is the querent's daily card. Honor the upright/reversed orientation and describe today's overall energy, what to watch out for, and one small concrete thing to do today. Mystical yet warm tone, about 100 words.`)
+          ? `这是求问者今天的每日一牌。请严格按以下格式输出，不要输出任何其他内容：
+第一部分：一段约 100 字的今日运势，结合该牌在此正逆位状态下的含义，写出今天的整体能量和需要留意的地方。用神秘而温暖的语气，直接从牌面意象切入，禁止任何问候语或称呼（如"亲爱的""你好""旅人"）。
+第二部分：另起一行，以"宜："开头，写 2 到 3 件今天适合做的具体小事，用顿号分隔，每件不超过 8 个字。
+第三部分：另起一行，以"忌："开头，写 2 到 3 件今天不宜做的事，用顿号分隔，每件不超过 8 个字。`
+          : `This is the querent's daily card. Output exactly this format and nothing else:
+Part 1: one paragraph (about 70 words) on today's energy and what to watch out for, honoring the upright/reversed orientation. Mystical yet warm. Start directly from the card's imagery — no greetings or forms of address ("Dear", "Hello", "traveler").
+Part 2: on a new line, "Do:" followed by 2–3 small concrete things to do today, comma-separated, each under 6 words.
+Part 3: on a new line, "Avoid:" followed by 2–3 things to avoid today, comma-separated, each under 6 words.`)
         : (locale === "zh"
           ? `请仔细考虑该牌在此正逆位状态下的深层含义。用神秘、简洁的语气，撰写一段大约 150 字的运势解读，给出具体的建议。`
           : `Honor the specific upright/reversed orientation. In a secretive, concise tone, write about 100 words of guidance and give one concrete suggestion.`);
@@ -265,7 +272,10 @@ Output the final reading text directly:`
       ? "【语言要求】必须全程使用简体中文输出，禁止使用日语、繁体中文或其他语言。"
       : "[Language] Respond in English only.";
 
-    const systemPrompt = `${rolePrompt}\n\n${cardsContext}\n\n${questionContext}\n\n${taskInstruction}\n\n${languageRule}\n注：除了直接输出解牌内容外，别的内容（如客套话）一概不要回答。`;
+    // The user's saved profile (zodiac / MBTI / focus / situation), read from their verified account
+    const profileContext = profileToPrompt(sanitizeProfile(user.user_metadata?.profile), locale);
+
+    const systemPrompt = `${rolePrompt}\n\n${cardsContext}\n\n${questionContext}${profileContext ? `\n\n${profileContext}` : ""}\n\n${taskInstruction}\n\n${languageRule}\n注：除了直接输出解牌内容外，别的内容（如客套话）一概不要回答。`;
 
     // 6. 发起 AI 调用与流式返回
     const genAI = new GoogleGenerativeAI(apiKey);

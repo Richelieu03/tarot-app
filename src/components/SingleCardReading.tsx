@@ -25,7 +25,8 @@ import ReadingBox from "./ReadingBox";
 import SpreadSelector from "./SpreadSelector";
 import { getAvatarColor, getInitial } from "../lib/utils";
 import { getCardMeaning } from "../lib/tarot-meanings";
-import { makeExcerpt } from "../lib/share-card";
+import { detectTextLocale, makeExcerpt } from "../lib/share-card";
+import { parseDailyAlmanac } from "../lib/daily-almanac";
 import ShareCardButton from "./ShareCardButton";
 import { track } from "../lib/analytics";
 import { DAILY_LIMITS, DAILY_LIMIT_MARKER, dailyLimitMessage, isDailyLimitError } from "../lib/daily-limit";
@@ -291,6 +292,10 @@ export default function SingleCardReading({ mode }: { mode: SingleCardMode }) {
       }]
     : undefined;
 
+  // Daily card: 宜/忌 lines are shown as tags, so take them out of the paragraph text
+  const daily = isDaily ? parseDailyAlmanac(completion) : null;
+  const displayCompletion = daily ? daily.body : completion;
+
   if (!appLoaded) return <div className="min-h-screen bg-[#05030a]" />;
 
   return (
@@ -377,7 +382,8 @@ export default function SingleCardReading({ mode }: { mode: SingleCardMode }) {
 
               <div className="w-full relative">
                 <ReadingBox 
-                  completion={completion}
+                  completion={displayCompletion}
+                  almanac={daily && !isLoading ? { dos: daily.dos, donts: daily.donts } : undefined}
                   isLoading={isLoading}
                   error={error}
                   isErrorState={(!!error && !isDailyLimitError(error)) || completion.includes("[HIDDEN_ERROR]") || completion.includes("【魔法阵崩溃】") || completion.includes("[Ritual interrupted]") || completion.includes("能量正在恢复中")}
@@ -417,19 +423,23 @@ export default function SingleCardReading({ mode }: { mode: SingleCardMode }) {
                               ? todayCloudLog.ai_reading
                               : completion;
                           const usable = user && reading && !error && !isEnergyRecoveryBlock(reading) && !reading.includes("【魔法阵崩溃】") && !reading.includes("[Ritual interrupted]");
+                          // The whole card follows the reading's language, not the current UI language
+                          const cl = usable ? detectTextLocale(reading) : locale;
+                          const parsed = usable && isDaily ? parseDailyAlmanac(reading) : null;
                           return {
-                            locale,
-                            kind: t(locale, isDaily ? "shareKindDaily" : "shareKindQuestion"),
+                            locale: cl,
+                            kind: t(cl, isDaily ? "shareKindDaily" : "shareKindQuestion"),
                             cards: [{
                               name: currentCard,
-                              label: getCardDisplayName(currentCard, locale),
-                              orientation: isReversed ? t(locale, "reversed") : t(locale, "upright"),
+                              label: getCardDisplayName(currentCard, cl),
+                              orientation: isReversed ? t(cl, "reversed") : t(cl, "upright"),
                               reversed: isReversed,
                             }],
                             question: isDaily ? undefined : userQuestion.trim() || undefined,
                             excerpt: usable
-                              ? makeExcerpt(reading, locale === "zh" ? 50 : 120)
-                              : getCardMeaning(currentCard, isReversed, locale) ?? undefined,
+                              ? makeExcerpt(parsed ? parsed.body : reading, cl === "zh" ? 50 : 120)
+                              : getCardMeaning(currentCard, isReversed, cl) ?? undefined,
+                            almanac: parsed && (parsed.dos.length || parsed.donts.length) ? { dos: parsed.dos, donts: parsed.donts } : undefined,
                           };
                         }}
                       />

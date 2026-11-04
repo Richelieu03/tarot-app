@@ -27,7 +27,7 @@ import SpreadSelector from "../../components/SpreadSelector";
 import CooldownRing from "../../components/CooldownRing";
 import { track } from "../../lib/analytics";
 import ShareCardButton from "../../components/ShareCardButton";
-import { makeExcerpt } from "../../lib/share-card";
+import { detectTextLocale, makeExcerpt } from "../../lib/share-card";
 import type { ReactNode } from "react";
 
 type AppStage = "asking" | "selecting" | "reading";
@@ -301,18 +301,22 @@ export default function ThreeCardSpread() {
       <div className="flex flex-col items-center gap-5">
         <ShareCardButton
           locale={locale}
-          getInput={() => ({
-            locale,
-            kind: t(locale, "shareKindSpread"),
-            cards: slots.map(s => ({
-              name: s.cardName!,
-              label: getCardDisplayName(s.cardName!, locale),
-              orientation: s.isReversed ? t(locale, "reversed") : t(locale, "upright"),
-              reversed: s.isReversed,
-            })),
-            question: userQuestion.trim() || undefined,
-            excerpt: makeExcerpt(completion, locale === "zh" ? 100 : 220),
-          })}
+          getInput={() => {
+            // The whole card follows the reading's language, not the current UI language
+            const cl = detectTextLocale(completion);
+            return {
+              locale: cl,
+              kind: t(cl, "shareKindSpread"),
+              cards: slots.map(s => ({
+                name: s.cardName!,
+                label: getCardDisplayName(s.cardName!, cl),
+                orientation: s.isReversed ? t(cl, "reversed") : t(cl, "upright"),
+                reversed: s.isReversed,
+              })),
+              question: userQuestion.trim() || undefined,
+              excerpt: makeExcerpt(completion, cl === "zh" ? 100 : 220),
+            };
+          }}
         />
         {main}
       </div>

@@ -7,6 +7,8 @@ import Link from "next/link";
 import { useState } from "react"; 
 import { supabase } from "../lib/supabase"; 
 import HistoryModal from "./HistoryModal"; 
+import ProfileModal from "./ProfileModal";
+import { ZODIAC_SIGNS, sanitizeProfile } from "../lib/profile";
 import { getAvatarColor, getInitial } from "../lib/utils";
 import { t, type UiKey } from "../lib/ui-i18n";
 
@@ -38,6 +40,11 @@ export default function Sidebar({
   currentSpread = "single", 
 }: SidebarProps) {
   const [showHistory, setShowHistory] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
+  const profile = sanitizeProfile(user?.user_metadata?.profile);
+  const zodiac = ZODIAC_SIGNS.find((z) => z.key === profile.zodiac);
+  // e.g. "天蝎座 · INFJ" under the name, once filled in
+  const profileTags = [zodiac && (locale === "zh" ? zodiac.zh : zodiac.en), profile.mbti].filter(Boolean).join(" · ");
   const [historyLogs, setHistoryLogs] = useState<any[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
 
@@ -126,8 +133,9 @@ export default function Sidebar({
                 </button>
 
                 <h3 className="mt-4 text-lg font-medium text-white">
-                  {user?.user_metadata?.full_name || user?.email?.split('@')[0] || (locale === "zh" ? "游荡的灵魂" : "Wandering Soul")}
+                  {profile.nickname || user?.user_metadata?.full_name || user?.email?.split('@')[0] || (locale === "zh" ? "游荡的灵魂" : "Wandering Soul")}
                 </h3>
+                {profileTags && <p className="mt-1 text-xs tracking-widest text-amber-300/80">{profileTags}</p>}
                 <p className="text-xs text-zinc-500 mt-1 truncate w-full">
                   {user?.email || (locale === "zh" ? "暂无星界契约" : "No Astral Bond")}
                 </p>
@@ -135,6 +143,20 @@ export default function Sidebar({
 
               {/* function */}
               <div className="flex-1 py-6 px-4 space-y-2 overflow-y-auto">
+                {user && (
+                  <button
+                    onClick={() => { setShowProfile(true); onClose(); }}
+                    className="w-full flex items-center gap-4 px-4 py-3.5 text-sm rounded-2xl transition-colors text-left text-zinc-300 hover:text-white hover:bg-white/5"
+                  >
+                    <span className="text-lg">🪪</span>
+                    {locale === "zh" ? "我的档案" : "My Profile"}
+                    {!profileTags && (
+                      <span className="ml-auto rounded-full bg-violet-500/20 px-2 py-0.5 text-[10px] text-violet-200">
+                        {locale === "zh" ? "去填写" : "Set up"}
+                      </span>
+                    )}
+                  </button>
+                )}
                 <button 
                   onClick={handleOpenHistoryClick} 
                   disabled={!user}
@@ -184,6 +206,10 @@ export default function Sidebar({
           </>
         )}
       </AnimatePresence>
+
+      {user && (
+        <ProfileModal isOpen={showProfile} onClose={() => setShowProfile(false)} user={user} locale={locale} />
+      )}
 
       <HistoryModal 
         isOpen={showHistory} 

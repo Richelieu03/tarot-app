@@ -27,6 +27,8 @@ interface ReadingBoxProps {
   notice?: string;
   /** When set, shows an "edit" link next to the question (only before any card is drawn) */
   onEditQuestion?: () => void;
+  /** Daily card 宜/忌 lines, shown as tags under the reading */
+  almanac?: { dos: string[]; donts: string[] };
 }
 
 export default function ReadingBox({
@@ -45,6 +47,7 @@ export default function ReadingBox({
   footer,
   notice,
   onEditQuestion,
+  almanac,
 }: ReadingBoxProps) {
   const hasMeanings = !!meanings && meanings.length > 0;
   return (
@@ -142,6 +145,23 @@ export default function ReadingBox({
             </span>
           )}
         </div>
+        )}
+
+        {/* 宜 / 忌 */}
+        {almanac && (almanac.dos.length > 0 || almanac.donts.length > 0) && (
+          <div className="mt-6 space-y-3 border-t border-white/10 pt-5 text-left font-sans not-italic">
+            {[
+              { label: locale === "zh" ? "宜" : "Do", items: almanac.dos, cls: "border-emerald-400/30 bg-emerald-400/10 text-emerald-200", badge: "text-emerald-300" },
+              { label: locale === "zh" ? "忌" : "Avoid", items: almanac.donts, cls: "border-rose-400/30 bg-rose-400/10 text-rose-200", badge: "text-rose-300" },
+            ].filter((row) => row.items.length > 0).map((row) => (
+              <div key={row.label} className="flex flex-wrap items-center gap-2">
+                <span className={`w-12 shrink-0 text-base font-semibold ${row.badge}`}>{row.label}</span>
+                {row.items.map((item) => (
+                  <span key={item} className={`rounded-full border px-3 py-1 text-xs ${row.cls}`}>{item}</span>
+                ))}
+              </div>
+            ))}
+          </div>
         )}
 
         {footer && <div className="mt-6 flex justify-center">{footer}</div>}

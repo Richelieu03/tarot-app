@@ -12,6 +12,8 @@ export interface ShareCardInput {
   excerpt?: string;
   /** Small heading, e.g. "每日一牌" / "圣三角" */
   kind: string;
+  /** Daily card 宜/忌 */
+  almanac?: { dos: string[]; donts: string[] };
 }
 
 const W = 1080;
@@ -63,10 +65,23 @@ function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number,
   return lines;
 }
 
+/**
+ * Language a reading was actually written in (it can differ from the current UI language
+ * if the user switched after drawing). Mostly-CJK text → "zh", otherwise "en".
+ */
+export function detectTextLocale(text: string): Locale {
+  const letters = text.replace(/[\s\d\p{P}\p{S}]/gu, "");
+  if (!letters) return "en";
+  const cjk = (letters.match(/[\u3400-\u9fff]/g) ?? []).length;
+  return cjk / letters.length > 0.3 ? "zh" : "en";
+}
+
 /** First sentence(s) of a reading, cleaned of markdown, trimmed to roughly maxChars */
 export function makeExcerpt(reading: string, maxChars: number): string {
   const clean = reading
     .replace(/\*\*/g, "")
+    // "【宝剑二 - 正位】" → "宝剑二正位"
+    .replace(/\s*-\s*(正位|逆位)/g, "$1")
     .replace(/[【】]/g, "")
     .replace(/\s+/g, " ")
     .trim();
@@ -213,10 +228,39 @@ export async function renderShareCard(input: ShareCardInput): Promise<Blob> {
     y += 56;
     ctx.fillStyle = "#e4e4e7";
     ctx.font = `italic 400 32px ${serif}`;
-    const lines = wrapText(ctx, input.excerpt, W - 240, Math.max(1, Math.floor((H - 170 - y) / 50)));
+    const almanacSpace = input.almanac && (input.almanac.dos.length || input.almanac.donts.length) ? 70 : 0;
+    const lines = wrapText(ctx, input.excerpt, W - 240, Math.max(1, Math.floor((H - 170 - almanacSpace - y) / 50)));
     for (const line of lines) {
       ctx.fillText(line, W / 2, y);
       y += 50;
+    }
+  }
+
+  // ── 宜 / 忌 ──
+  if (input.almanac) {
+    y += 14;
+    const rows = [
+      { label: zh ? "宜" : "Do", items: input.almanac.dos, color: "rgba(110, 231, 183, 0.95)" },
+      { label: zh ? "忌" : "Avoid", items: input.almanac.donts, color: "rgba(253, 164, 175, 0.95)" },
+    ].filter((r) => r.items.length > 0);
+    for (const row of rows) {
+      const text = row.items.join(zh ? "、" : ", ");
+      ctx.font = `600 32px ${serif}`;
+      const labelW = ctx.measureText(row.label).width;
+      ctx.font = `400 28px ${SANS}`;
+      const fitted = wrapText(ctx, text, W - 300, 1)[0] ?? "";
+      const textW = ctx.measureText(fitted).width;
+      const gap = 22;
+      const startX = (W - (labelW + gap + textW)) / 2;
+      ctx.textAlign = "left";
+      ctx.fillStyle = row.color;
+      ctx.font = `600 32px ${serif}`;
+      ctx.fillText(row.label, startX, y);
+      ctx.fillStyle = "#e4e4e7";
+      ctx.font = `400 28px ${SANS}`;
+      ctx.fillText(fitted, startX + labelW + gap, y);
+      ctx.textAlign = "center";
+      y += 52;
     }
   }
 
