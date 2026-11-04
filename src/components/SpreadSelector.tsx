@@ -6,6 +6,7 @@ import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import type { Locale } from "../lib/locale";
 import { t, type UiKey } from "../lib/ui-i18n";
+import { track } from "../lib/analytics";
 
 export type SpreadKind = "daily" | "single" | "three";
 
@@ -84,7 +85,7 @@ export default function SpreadSelector({ currentSpread, locale }: SpreadSelector
               ) : (
                 <button
                   key={o.kind}
-                  onClick={() => { setIsOpen(false); router.push(o.href); }}
+                  onClick={() => { track("mode_switch", { to: o.kind }); setIsOpen(false); router.push(o.href); }}
                   className="w-full text-left rounded-lg px-3 py-2 text-xs text-zinc-400 hover:text-zinc-100 hover:bg-white/5 transition-colors flex items-center gap-2"
                 >
                   <span>{o.icon}</span>
@@ -92,6 +93,14 @@ export default function SpreadSelector({ currentSpread, locale }: SpreadSelector
                 </button>
               ),
             )}
+            <div className="my-1 border-t border-white/10" />
+            <button
+              onClick={() => { track("mode_switch", { to: "library" }); setIsOpen(false); router.push("/cards"); }}
+              className="w-full text-left rounded-lg px-3 py-2 text-xs text-zinc-400 hover:text-zinc-100 hover:bg-white/5 transition-colors flex items-center gap-2"
+            >
+              <span>📖</span>
+              {t(locale, "modeLibrary")}
+            </button>
           </motion.div>
         )}
       </AnimatePresence>

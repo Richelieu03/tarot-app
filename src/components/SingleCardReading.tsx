@@ -27,6 +27,7 @@ import { getAvatarColor, getInitial } from "../lib/utils";
 import { getCardMeaning } from "../lib/tarot-meanings";
 import { makeExcerpt } from "../lib/share-card";
 import ShareCardButton from "./ShareCardButton";
+import { track } from "../lib/analytics";
 import { DAILY_LIMITS, DAILY_LIMIT_MARKER, dailyLimitMessage, isDailyLimitError } from "../lib/daily-limit";
 
 type AppStage = "asking" | "selecting" | "reading";
@@ -64,6 +65,7 @@ export default function SingleCardReading({ mode }: { mode: SingleCardMode }) {
   }, [locale]);
 
   const handleSetLocale = async (newLocale: Locale) => {
+    track("language_switch", { to: newLocale });
     setLocale(newLocale);
     if (user) {
       await supabase.auth.updateUser({ data: { locale: newLocale } });
@@ -75,7 +77,10 @@ export default function SingleCardReading({ mode }: { mode: SingleCardMode }) {
     streamProtocol: "text",
     onError: async (err) => {
       // Hitting the daily limit is expected, not a crash — don't log it
-      if (err.message?.startsWith(DAILY_LIMIT_MARKER)) return;
+      if (err.message?.startsWith(DAILY_LIMIT_MARKER)) {
+        track("daily_limit_hit", { mode: spreadType });
+        return;
+      }
       const { data: { user: cu } } = await supabase.auth.getUser();
       if (!cu) return;
       await supabase.from('DrawLog').insert([{
@@ -90,6 +95,9 @@ export default function SingleCardReading({ mode }: { mode: SingleCardMode }) {
     },
     // DrawLog is now written by /api/tarot itself (the daily limit counts those rows)
     onFinish: (_, result) => {
+      if (result.length > 10 && !result.includes("【魔法阵崩溃】") && !result.includes("[Ritual interrupted]")) {
+        track("ai_reading", { mode: spreadType, locale });
+      }
       if (result.length > 10 && !result.includes("Error") && !result.includes("503")) {
         localStorage.setItem(LS("last_date"), new Date().toDateString());
         localStorage.setItem(LS("last_ai_reading"), result);
@@ -173,6 +181,7 @@ export default function SingleCardReading({ mode }: { mode: SingleCardMode }) {
 
   const handleSelectFromFan = (index: number) => {
     if (!isSelecting) return;
+    track("draw_card", { mode: spreadType, loggedIn: !!user });
     setClickedIndex(index);
     setIsSelecting(false);
     const { name: pickedCard, reversed: isRev } = pickRandomTarotCard();
@@ -190,6 +199,7 @@ export default function SingleCardReading({ mode }: { mode: SingleCardMode }) {
 
   const handleMainCardClick = () => {
     if (flipped || isSelecting) return;
+    track("reveal_card", { mode: spreadType, loggedIn: !!user, locale });
 
     setFlipped(true);
     
@@ -392,7 +402,7 @@ export default function SingleCardReading({ mode }: { mode: SingleCardMode }) {
                     <div className="flex flex-col items-center gap-3">
                       {!user && (
                         <button
-                          onClick={() => setShowAuthOverlay(true)}
+                          onClick={() => { track("login_prompt_click", { mode: spreadType }); setShowAuthOverlay(true); }}
                           className="group rounded-full border border-amber-400/30 bg-gradient-to-b from-amber-500/10 to-amber-950/50 px-8 py-3 text-xs font-bold tracking-[0.15em] text-amber-200 shadow-[0_0_30px_-5px_rgba(245,158,11,0.25)] hover:border-amber-400/60 hover:text-amber-100 hover:shadow-[0_0_40px_rgba(245,158,11,0.4)] transition-all duration-300 active:scale-95"
                         >
                           🔮 {t(locale, "loginForReading")}

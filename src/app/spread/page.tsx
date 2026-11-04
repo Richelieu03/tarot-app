@@ -25,6 +25,7 @@ import TarotFan from "../../components/TarotFan";
 import ReadingBox from "../../components/ReadingBox";
 import SpreadSelector from "../../components/SpreadSelector"; 
 import CooldownRing from "../../components/CooldownRing";
+import { track } from "../../lib/analytics";
 import ShareCardButton from "../../components/ShareCardButton";
 import { makeExcerpt } from "../../lib/share-card";
 import type { ReactNode } from "react";
@@ -95,7 +96,10 @@ export default function ThreeCardSpread() {
     streamProtocol: "text",
     onError: async (err) => {
       // Hitting the daily limit is expected, not a crash — don't log it
-      if (err.message?.startsWith(DAILY_LIMIT_MARKER)) return;
+      if (err.message?.startsWith(DAILY_LIMIT_MARKER)) {
+        track("daily_limit_hit", { mode: "trinity" });
+        return;
+      }
       await saveLog({
         spreadType: "trinity",
         cardName: slotsRef.current[0]?.cardName || "愚者",
@@ -107,6 +111,9 @@ export default function ThreeCardSpread() {
     // Successful readings are saved by /api/tarot (spread_type "trinity" + spread_data),
     // which is also what the server-side daily limit counts.
     onFinish: (_, result) => {
+      if (result.length > 10 && !result.includes("【魔法阵崩溃】") && !result.includes("[Ritual interrupted]")) {
+        track("ai_reading", { mode: "trinity", locale });
+      }
       if (result.length > 10 && !result.includes("[Ritual interrupted]") && !result.includes("【魔法阵崩溃】")) {
         setUsedToday((n) => n + 1);
         setLastSpreadAt(Date.now());
@@ -184,6 +191,7 @@ export default function ThreeCardSpread() {
   }, [locale]);
 
   const handleSetLocale = async (newLocale: Locale) => {
+    track("language_switch", { to: newLocale });
     setLocale(newLocale);
     if (user) await supabase.auth.updateUser({ data: { locale: newLocale } });
   };
@@ -222,6 +230,7 @@ export default function ThreeCardSpread() {
     localStorage.setItem("tarot_three_card_last_drawn", updatedSlots.map(s => `${s.id}:${s.cardName}:${s.isReversed}`).join("|"));
 
     if (activeSlotIndex === slots.length - 1) {
+      track("draw_card", { mode: "trinity", loggedIn: true });
       setIsSelecting(false);
       setAppStage("reading");
     }
@@ -419,6 +428,7 @@ export default function ThreeCardSpread() {
                             setSlots(updated);
 
                             if (updated.every(s => s.isFlipped)) {
+                              track("reveal_card", { mode: "trinity", loggedIn: true, locale });
                               triggerSpreadAIReading(updated);
                             }
                           }}

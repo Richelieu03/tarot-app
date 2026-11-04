@@ -6,6 +6,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import type { Locale } from "../lib/locale";
 import { renderShareCard, type ShareCardInput } from "../lib/share-card";
 import { t } from "../lib/ui-i18n";
+import { track } from "../lib/analytics";
 
 interface ShareCardButtonProps {
   locale: Locale;
@@ -27,7 +28,9 @@ export default function ShareCardButton({ locale, getInput }: ShareCardButtonPro
     if (busy) return;
     setBusy(true);
     try {
-      const blob = await renderShareCard(getInput());
+      const input = getInput();
+      track("share_card_open", { kind: input.kind, cards: input.cards.length });
+      const blob = await renderShareCard(input);
       const f = new File([blob], `ashleys-tarot-${Date.now()}.png`, { type: "image/png" });
       setFile(f);
       setUrl(URL.createObjectURL(blob));
@@ -49,6 +52,7 @@ export default function ShareCardButton({ locale, getInput }: ShareCardButtonPro
     if (!file) return;
     try {
       await navigator.share({ files: [file], title: "Ashley's Tarot" });
+      track("share_card_shared");
     } catch {
       // user cancelled the share sheet — nothing to do
     }
@@ -101,6 +105,7 @@ export default function ShareCardButton({ locale, getInput }: ShareCardButtonPro
                 <a
                   href={url}
                   download={file?.name}
+                  onClick={() => track("share_card_saved")}
                   className="rounded-full border border-amber-400/40 px-6 py-2.5 text-xs tracking-[0.15em] text-amber-200 transition-colors hover:bg-amber-500/10"
                 >
                   {t(locale, "shareSave")}
