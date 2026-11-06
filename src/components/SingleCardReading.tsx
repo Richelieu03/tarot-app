@@ -10,7 +10,7 @@ import { useEffect, useState } from "react";
 import "../app/tarot-spread.css";
 import { pickRandomTarotCard } from "../lib/draw-random";
 import type { Locale } from "../lib/locale";
-import { LOCALE_STORAGE_KEY, defaultLocale } from "../lib/locale";
+import { LOCALE_STORAGE_KEY, getInitialLocale } from "../lib/locale";
 import { getCardDisplayName } from "../lib/tarot-labels";
 import { formatDailyRecap, isEnergyRecoveryBlock, t } from "../lib/ui-i18n";
 import { supabase } from "../lib/supabase";
@@ -24,7 +24,7 @@ import TarotFan from "./TarotFan";
 import ReadingBox from "./ReadingBox";
 import SpreadSelector from "./SpreadSelector";
 import { getAvatarColor, getInitial } from "../lib/utils";
-import { getCardMeaning } from "../lib/tarot-meanings";
+import { CARD_BY_ZH, getCardMeaning } from "../lib/tarot-meanings";
 import { detectTextLocale, makeExcerpt } from "../lib/share-card";
 import { parseDailyAlmanac } from "../lib/daily-almanac";
 import ShareCardButton from "./ShareCardButton";
@@ -42,7 +42,8 @@ export default function SingleCardReading({ mode }: { mode: SingleCardMode }) {
   const LS = (key: string) => `tarot_${spreadType}_${key}`;
   const LS_USER_QUESTION = LS("user_question");
 
-  const [locale, setLocale] = useState<Locale>(defaultLocale);
+  // Saved choice, else browser language (the page renders nothing until appLoaded, so no hydration mismatch)
+  const [locale, setLocale] = useState<Locale>(getInitialLocale);
   // Daily card skips the question screen and goes straight to the deck
   const [appStage, setAppStage] = useState<AppStage>(isDaily ? "selecting" : "asking");
   const [userQuestion, setUserQuestion] = useState("");
@@ -226,8 +227,39 @@ export default function SingleCardReading({ mode }: { mode: SingleCardMode }) {
     });
   };
 
+  // A guest who drew a card and then signed up comes back through the verification link
+  // with ?resume=… — put that card into localStorage so the restore logic below picks it up.
   useEffect(() => {
-    if (appLoaded && !flipped) {
+    const url = new URL(window.location.href);
+    const raw = url.searchParams.get("resume");
+    if (!raw) return;
+    try {
+      const p = JSON.parse(raw) as { m?: string; c?: string; r?: boolean; q?: string; d?: string };
+      if (p.m === spreadType && p.c && CARD_BY_ZH[p.c] && p.d === new Date().toDateString()) {
+        localStorage.setItem(LS("last_drawn_card"), p.c);
+        localStorage.setItem(LS("last_card_reversed"), String(!!p.r));
+        localStorage.setItem(LS("last_date"), p.d);
+        if (!isDaily && p.q) localStorage.setItem(LS_USER_QUESTION, p.q.slice(0, 500));
+      }
+    } catch {
+      // malformed link — ignore
+    }
+    url.searchParams.delete("resume");
+    window.history.replaceState(null, "", url.pathname + url.search + url.hash);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Return URL for login / sign-up that carries the card a guest has already drawn
+  const authRedirect =
+    typeof window !== "undefined" && !isSelecting && !user
+      ? `${window.location.origin}${window.location.pathname}?resume=${encodeURIComponent(
+          JSON.stringify({ m: spreadType, c: currentCard, r: isReversed, q: isDaily ? "" : userQuestion.trim(), d: new Date().toDateString() }),
+        )}`
+      : undefined;
+
+  // Restores a drawn-but-unread card and asks for its reading once the user is logged in.
+  // Also covers "guest flipped the card, then logged in on the same page" (no reload).
+  useEffect(() => {
+    if (appLoaded && !completion && !isLoading) {
       const cachedDate = localStorage.getItem(LS("last_date"));
       const todayStr = new Date().toDateString();
 
@@ -514,6 +546,7 @@ export default function SingleCardReading({ mode }: { mode: SingleCardMode }) {
                 setLocale={setLocale} 
                 isOpen={showAuthOverlay} 
                 onClose={() => setShowAuthOverlay(false)} 
+                redirectTo={authRedirect}
               />
             </motion.div>
           </motion.div>

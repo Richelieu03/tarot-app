@@ -7,7 +7,7 @@ import { useEffect, useState, useRef } from "react";
 import "../tarot-spread.css"; 
 import { pickRandomTarotCard } from "../../lib/draw-random";
 import type { Locale } from "../../lib/locale";
-import { LOCALE_STORAGE_KEY, defaultLocale } from "../../lib/locale";
+import { LOCALE_STORAGE_KEY, getInitialLocale } from "../../lib/locale";
 import { getCardDisplayName } from "../../lib/tarot-labels";
 import { isEnergyRecoveryBlock, t } from "../../lib/ui-i18n";
 import { supabase } from "../../lib/supabase";
@@ -47,12 +47,8 @@ const INITIAL_SLOTS: CardSlot[] = [
 ];
 
 export default function ThreeCardSpread() {
-  const [locale, setLocale] = useState<Locale>(() => {
-      if (typeof window !== "undefined") {
-        return (localStorage.getItem(LOCALE_STORAGE_KEY) as Locale) || defaultLocale;
-      }
-      return defaultLocale;
-    });
+  // Saved choice, else browser language
+  const [locale, setLocale] = useState<Locale>(getInitialLocale);
 
     useEffect(() => {
       document.documentElement.lang = locale === "zh" ? "zh-CN" : "en";

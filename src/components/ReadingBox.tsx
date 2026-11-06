@@ -4,6 +4,7 @@
 import type { ReactNode } from "react";
 import type { Locale } from "../lib/locale";
 import { t } from "../lib/ui-i18n";
+import ReadingText from "./ReadingText";
 
 interface ReadingBoxProps {
   completion: string;
@@ -126,7 +127,7 @@ export default function ReadingBox({
             </div>
           ) : completion ? (
             /* 状态 1: 正常显示 AI 解牌文字 */
-            completion
+            <div><ReadingText text={completion} /></div>
           ) : isLoading ? (
             /* 🌟 状态 2: 这里是刚加的！点击翻牌瞬间亮起的动画和提示 */
             <div className="flex items-center gap-3 text-violet-400/80 font-sans mt-2">

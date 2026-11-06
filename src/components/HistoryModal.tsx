@@ -4,6 +4,7 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { getCardDisplayName } from "../lib/tarot-labels";
+import ReadingText from "./ReadingText";
 
 // 🌟 1. 定义多牌阵里单张牌的数据结构
 interface CardItem {
@@ -182,7 +183,7 @@ export default function HistoryModal({ isOpen, onClose, isLoading, logs, locale 
                         <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
                           <div className="pt-2">
                             <div className="text-[10px] text-zinc-500 mb-2">{locale === "zh" ? "神谕启示" : "Revelation"}</div>
-                            <div className="text-sm text-zinc-300 leading-7 font-serif whitespace-pre-wrap">{log.ai_reading}</div>
+                            <div className="text-sm text-zinc-300 leading-7 font-serif whitespace-pre-wrap"><ReadingText text={log.ai_reading} /></div>
                           </div>
                         </motion.div>
                       )}

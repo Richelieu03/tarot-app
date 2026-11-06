@@ -37,6 +37,7 @@ export const metadata: Metadata = {
     locale: "zh_CN",
     alternateLocale: ["en_US"],
   },
+  other: { google: "notranslate" },
   twitter: {
     card: "summary_large_image",
     title: "Ashley's Tarot · 神谕之门",
@@ -54,8 +55,10 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      lang="zh-CN"
+      // The site has its own EN/中文 switch; browser auto-translation mangles card names
+      translate="no"
+      className={`notranslate ${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
         {UMAMI_WEBSITE_ID && (

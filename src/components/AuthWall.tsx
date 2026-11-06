@@ -12,6 +12,8 @@ interface AuthWallProps {
   isOpen: boolean;       
   onClose: () => void;   
   subtitle?: string;     
+  /** Where Google login / the verification email should land. Carries a guest's pending draw. */
+  redirectTo?: string;
 }
 
 export default function AuthWall({ 
@@ -19,7 +21,8 @@ export default function AuthWall({
   setLocale, 
   isOpen, 
   onClose,
-  subtitle 
+  subtitle,
+  redirectTo,
 }: AuthWallProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -27,7 +30,7 @@ export default function AuthWall({
   const [isEmailLoading, setIsEmailLoading] = useState(false);
 
   const loginWithGoogle = async () => {
-    const redirectUrl = typeof window !== "undefined" ? window.location.origin : "http://localhost:3000";
+    const redirectUrl = redirectTo ?? (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo: redirectUrl }
@@ -52,6 +55,9 @@ export default function AuthWall({
       const { error } = await supabase.auth.signUp({
         email: targetEmail,
         password: targetPassword,
+        // The verification link often opens in a different browser (e.g. WeChat → Safari),
+        // so the drawn card travels in this URL instead of relying on localStorage
+        options: { emailRedirectTo: redirectTo ?? window.location.origin },
       });
       setIsEmailLoading(false);
 

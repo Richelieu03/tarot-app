@@ -59,6 +59,14 @@ function supabaseAsUser(accessToken: string) {
   });
 }
 
+/** Rate limit / overload / transient server errors are worth retrying; bad requests are not */
+function isRetryableGeminiError(err: unknown): boolean {
+  const status = (err as { status?: number })?.status;
+  if (status && [429, 500, 503, 504].includes(status)) return true;
+  const msg = err instanceof Error ? err.message : String(err);
+  return /\b(429|500|503|504)\b|RESOURCE_EXHAUSTED|overloaded|UNAVAILABLE|quota/i.test(msg);
+}
+
 function isValidCard(name: unknown): name is string {
   return typeof name === "string" && DECK_SET.has(name);
 }
@@ -279,15 +287,35 @@ Part 3: on a new line, "Avoid:" followed by 2–3 things to avoid today, comma-s
 
     // 6. 发起 AI 调用与流式返回
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({
-      model: "gemini-2.5-flash",
-      systemInstruction: languageRule,
-      // 2.5 Flash "thinks" before answering by default, which adds several seconds.
-      // A short reading doesn't need it. (Field isn't in this SDK's types yet, but is passed through as-is.)
-      generationConfig: { thinkingConfig: { thinkingBudget: 0 } } as Record<string, unknown>,
-    });
-    const result = await model.generateContent(systemPrompt);
-    const fullText = result.response.text().trim();
+    const makeModel = (name: string) =>
+      genAI.getGenerativeModel({
+        model: name,
+        systemInstruction: languageRule,
+        // 2.5 models "think" before answering by default, which adds several seconds.
+        // A short reading doesn't need it. (Field isn't in this SDK's types yet, but is passed through as-is.)
+        generationConfig: { thinkingConfig: { thinkingBudget: 0 } } as Record<string, unknown>,
+      });
+
+    // Free-tier Gemini rate-limits bursts (e.g. a group chat all drawing at once):
+    // try the main model, retry it once after a short pause, then fall back to the lighter model.
+    const PRIMARY_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+    const FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL || "gemini-2.5-flash-lite";
+    const attempts = [PRIMARY_MODEL, PRIMARY_MODEL, FALLBACK_MODEL];
+    let fullText = "";
+    let lastError: unknown;
+    for (let i = 0; i < attempts.length; i++) {
+      try {
+        const result = await makeModel(attempts[i]).generateContent(systemPrompt);
+        fullText = result.response.text().trim();
+        if (fullText) break;
+      } catch (err) {
+        lastError = err;
+        if (!isRetryableGeminiError(err)) throw err;
+        console.warn(`Gemini ${attempts[i]} busy (attempt ${i + 1}), retrying…`);
+        if (i < attempts.length - 1) await new Promise((r) => setTimeout(r, 1200 * (i + 1)));
+      }
+    }
+    if (!fullText && lastError) throw lastError;
     // An empty answer (e.g. blocked by safety filters) must not be stored, or it would
     // use up the user's daily quota and be "restored" as a blank reading.
     if (!fullText) {
