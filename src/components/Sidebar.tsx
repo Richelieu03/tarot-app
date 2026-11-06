@@ -11,6 +11,7 @@ import ProfileModal from "./ProfileModal";
 import { ZODIAC_SIGNS, sanitizeProfile } from "../lib/profile";
 import { getAvatarColor, getInitial } from "../lib/utils";
 import { t, type UiKey } from "../lib/ui-i18n";
+import { useStreak } from "../hooks/useStreak";
 
 // Navigation shown under the history button
 const NAV_LINKS: { href: string; icon: string; labelKey: UiKey }[] = [
@@ -45,6 +46,8 @@ export default function Sidebar({
   const zodiac = ZODIAC_SIGNS.find((z) => z.key === profile.zodiac);
   // e.g. "天蝎座 · INFJ" under the name, once filled in
   const profileTags = [zodiac && (locale === "zh" ? zodiac.zh : zodiac.en), profile.mbti].filter(Boolean).join(" · ");
+  // Refetch whenever the sidebar opens so today's check-in shows up
+  const streak = useStreak(user, false, isOpen);
   const [historyLogs, setHistoryLogs] = useState<any[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
 
@@ -136,6 +139,11 @@ export default function Sidebar({
                   {profile.nickname || user?.user_metadata?.full_name || user?.email?.split('@')[0] || (locale === "zh" ? "游荡的灵魂" : "Wandering Soul")}
                 </h3>
                 {profileTags && <p className="mt-1 text-xs tracking-widest text-amber-300/80">{profileTags}</p>}
+                {user && streak.total > 0 && (
+                  <p className={`mt-1 text-xs tracking-widest ${streak.checkedInToday ? "text-amber-200" : "text-zinc-400"}`}>
+                    ✦ {t(locale, "streakSidebar").replace("{n}", String(streak.current)).replace("{total}", String(streak.total))}
+                  </p>
+                )}
                 <p className="text-xs text-zinc-500 mt-1 truncate w-full">
                   {user?.email || (locale === "zh" ? "暂无星界契约" : "No Astral Bond")}
                 </p>

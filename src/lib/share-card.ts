@@ -14,6 +14,8 @@ export interface ShareCardInput {
   kind: string;
   /** Daily card 宜/忌 */
   almanac?: { dos: string[]; donts: string[] };
+  /** Daily check-in streak, shown in the header ("连续第 5 日") */
+  streak?: number;
 }
 
 const W = 1080;
@@ -174,7 +176,8 @@ export async function renderShareCard(input: ShareCardInput): Promise<Blob> {
   ctx.font = `500 26px ${SANS}`;
   const now = new Date();
   const date = `${now.getFullYear()}.${String(now.getMonth() + 1).padStart(2, "0")}.${String(now.getDate()).padStart(2, "0")}`;
-  ctx.fillText(`✦  ${input.kind}  ·  ${date}  ✦`, W / 2, 112);
+  const streakText = input.streak ? (zh ? `连续第 ${input.streak} 日` : `Day ${input.streak} streak`) : "";
+  ctx.fillText(`✦  ${[input.kind, date, streakText].filter(Boolean).join("  ·  ")}  ✦`, W / 2, 112);
 
   ctx.fillStyle = "#f4f4f5";
   ctx.font = `300 52px ${serif}`;

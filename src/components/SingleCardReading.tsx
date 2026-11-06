@@ -28,6 +28,7 @@ import { CARD_BY_ZH, getCardMeaning } from "../lib/tarot-meanings";
 import { detectTextLocale, makeExcerpt } from "../lib/share-card";
 import { parseDailyAlmanac } from "../lib/daily-almanac";
 import ShareCardButton from "./ShareCardButton";
+import { useStreak } from "../hooks/useStreak";
 import { track } from "../lib/analytics";
 import { DAILY_LIMITS, DAILY_LIMIT_MARKER, dailyLimitMessage, isDailyLimitError } from "../lib/daily-limit";
 
@@ -331,6 +332,12 @@ export default function SingleCardReading({ mode }: { mode: SingleCardMode }) {
   const daily = isDaily ? parseDailyAlmanac(completion) : null;
   const displayCompletion = daily ? daily.body : completion;
 
+  // Daily check-in streak (签到): today counts once a 每日一牌 reading has come through
+  const dailyDone = isDaily && !!user && flipped && !isLoading && !error && completion.length > 10
+    && !isEnergyRecoveryBlock(completion) && !completion.includes("[HIDDEN_ERROR]")
+    && !completion.includes("【魔法阵崩溃】") && !completion.includes("[Ritual interrupted]");
+  const streak = useStreak(user, dailyDone);
+
   if (!appLoaded) return <div className="min-h-screen bg-[#05030a]" />;
 
   return (
@@ -455,6 +462,11 @@ export default function SingleCardReading({ mode }: { mode: SingleCardMode }) {
                           🔮 {t(locale, "loginForReading")}
                         </button>
                       )}
+                      {dailyDone && streak.current > 0 && (
+                        <p className="text-xs tracking-[0.2em] text-amber-300/80">
+                          ✦ {t(locale, "streakLine").replace("{n}", String(streak.current))} ✦
+                        </p>
+                      )}
                       <ShareCardButton
                         locale={locale}
                         getInput={() => {
@@ -481,6 +493,7 @@ export default function SingleCardReading({ mode }: { mode: SingleCardMode }) {
                               ? makeExcerpt(parsed ? parsed.body : reading, cl === "zh" ? 50 : 120)
                               : getCardMeaning(currentCard, isReversed, cl) ?? undefined,
                             almanac: parsed && (parsed.dos.length || parsed.donts.length) ? { dos: parsed.dos, donts: parsed.donts } : undefined,
+                            streak: dailyDone && streak.current > 0 ? streak.current : undefined,
                           };
                         }}
                       />
