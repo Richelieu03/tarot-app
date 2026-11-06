@@ -13,7 +13,7 @@ import { isEnergyRecoveryBlock, t } from "../../lib/ui-i18n";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../hooks/useAuth"; 
 import { getAvatarColor, getInitial } from "../../lib/utils";
-import { getCardMeaning } from "../../lib/tarot-meanings";
+import { CARD_BY_ZH, getCardMeaning } from "../../lib/tarot-meanings";
 import { DAILY_LIMITS, DAILY_LIMIT_MARKER, SPREAD_COOLDOWN_MS, cooldownMessage, dailyLimitMessage, isDailyLimitError } from "../../lib/daily-limit";
 import { useDrawLogger } from "../../hooks/useDrawLogger"; 
 
@@ -64,6 +64,9 @@ export default function ThreeCardSpread() {
   // Successful three-card readings today (server enforces DAILY_LIMITS.trinity)
   const [usedToday, setUsedToday] = useState(0);
   const restoredRef = useRef(false);
+  // Guests can draw too; their cards get an AI reading once they log in
+  const [showAuthOverlay, setShowAuthOverlay] = useState(false);
+  const guestPendingRef = useRef(false); // cards drawn as a guest (or carried back via ?resume=) still need a reading
   // Time of the latest successful three-card reading (for the 2-hour cooldown)
   const [lastSpreadAt, setLastSpreadAt] = useState<number | null>(null);
   // Re-render once a minute so the cooldown countdown stays current
@@ -146,6 +149,9 @@ export default function ThreeCardSpread() {
       const latestAt = new Date(latest.created_at).getTime();
       setLastSpreadAt(latestAt);
 
+      // A guest just drew cards and logged in: keep those, don't swap in the last saved reading
+      if (guestPendingRef.current) return;
+
       // Restore it if it's from today or still within the cooldown window
       const stillRelevant = latestAt >= startOfToday.getTime() || Date.now() - latestAt < SPREAD_COOLDOWN_MS;
       const cards = Array.isArray(latest.spread_data) ? latest.spread_data : null;
@@ -162,6 +168,41 @@ export default function ThreeCardSpread() {
       setCompletion(latest.ai_reading || "");
     })();
   }, [user, setCompletion]);
+
+  // Coming back from the verification email / Google login with ?resume=…: restore the guest's three cards
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const raw = url.searchParams.get("resume");
+    if (!raw) return;
+    try {
+      const p = JSON.parse(raw) as { m?: string; s?: [string, boolean][]; q?: string; d?: string };
+      const valid = p.m === "trinity" && p.d === new Date().toDateString()
+        && Array.isArray(p.s) && p.s.length === INITIAL_SLOTS.length && p.s.every(([n]) => !!CARD_BY_ZH[n]);
+      if (valid) {
+        guestPendingRef.current = true;
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- one-off restore from the URL on mount
+        setSlots(INITIAL_SLOTS.map((slot, i) => ({ ...slot, cardName: p.s![i][0], isReversed: !!p.s![i][1], isFlipped: true })));
+        setUserQuestion((p.q ?? "").slice(0, 500));
+        setIsSelecting(false);
+        setAppStage("reading");
+      }
+    } catch {
+      // malformed link — ignore
+    }
+    url.searchParams.delete("resume");
+    window.history.replaceState(null, "", url.pathname + url.search + url.hash);
+  }, []);
+
+  // Return URL for login / sign-up that carries a guest's three cards
+  const authRedirect =
+    typeof window !== "undefined" && !user && slots.every(s => s.cardName)
+      ? `${window.location.origin}${window.location.pathname}?resume=${encodeURIComponent(JSON.stringify({
+          m: "trinity",
+          s: slots.map(s => [s.cardName, s.isReversed]),
+          q: userQuestion.trim(),
+          d: new Date().toDateString(),
+        }))}`
+      : undefined;
 
   const remainingToday = Math.max(0, DAILY_LIMITS.trinity - usedToday);
   const cooldownLeftMs = lastSpreadAt ? lastSpreadAt + SPREAD_COOLDOWN_MS - now : 0;
@@ -226,7 +267,7 @@ export default function ThreeCardSpread() {
     localStorage.setItem("tarot_three_card_last_drawn", updatedSlots.map(s => `${s.id}:${s.cardName}:${s.isReversed}`).join("|"));
 
     if (activeSlotIndex === slots.length - 1) {
-      track("draw_card", { mode: "trinity", loggedIn: true });
+      track("draw_card", { mode: "trinity", loggedIn: !!user });
       setIsSelecting(false);
       setAppStage("reading");
     }
@@ -266,6 +307,14 @@ export default function ThreeCardSpread() {
     });
   };
 
+  // Once a guest with three flipped cards logs in (same page or via ?resume=), fetch their reading
+  useEffect(() => {
+    if (!user || !guestPendingRef.current || isLoading || completion) return;
+    if (!slots.every(s => s.isFlipped && s.cardName)) return;
+    guestPendingRef.current = false;
+    triggerSpreadAIReading(slots);
+  }, [user, slots]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const subtitleMain = isSelecting
     ? `${t(locale, "subtitleSelecting" as any)} (${slots.filter(s => s.cardName).length} / 3)`
     : slots.every(s => s.isFlipped)
@@ -289,17 +338,19 @@ export default function ThreeCardSpread() {
     : undefined;
 
   // Share button sits above whatever footer action is showing, once the reading is in
-  const hasReading = slots.every(s => s.isFlipped && s.cardName) && !!completion && !error && !isLoading
+  const allFlipped = slots.every(s => s.isFlipped && s.cardName);
+  const hasReading = allFlipped && !!completion && !error && !isLoading
     && !completion.includes("【魔法阵崩溃】") && !completion.includes("[Ritual interrupted]");
+  const canShare = hasReading || (!user && allFlipped);
   const withShare = (main: ReactNode) => {
-    if (!hasReading) return main || undefined;
+    if (!canShare) return main || undefined;
     return (
       <div className="flex flex-col items-center gap-5">
         <ShareCardButton
           locale={locale}
           getInput={() => {
             // The whole card follows the reading's language, not the current UI language
-            const cl = detectTextLocale(completion);
+            const cl = hasReading ? detectTextLocale(completion) : locale;
             return {
               locale: cl,
               kind: t(cl, "shareKindSpread"),
@@ -310,7 +361,10 @@ export default function ThreeCardSpread() {
                 reversed: s.isReversed,
               })),
               question: userQuestion.trim() || undefined,
-              excerpt: makeExcerpt(completion, cl === "zh" ? 100 : 220),
+              excerpt: hasReading
+                ? makeExcerpt(completion, cl === "zh" ? 100 : 220)
+                // guest: the three pre-written meanings
+                : slots.map(s => getCardMeaning(s.cardName!, s.isReversed, cl)).filter(Boolean).join(cl === "zh" ? "" : " "),
             };
           }}
         />
@@ -321,20 +375,6 @@ export default function ThreeCardSpread() {
 
   if (!appLoaded) return <div className="min-h-screen bg-[#05030a]" />;
   
-  // 🌟 未登录直接由开箱即用的 AuthWall 完美接管（自带毛玻璃与点击 X 返回主页）
-  if (!user) {
-    return (
-      <div className="min-h-screen w-full bg-[#05030a]">
-        <AuthWall 
-          locale={locale} 
-          setLocale={setLocale} 
-          isOpen={true} 
-          onClose={() => { window.location.href = "/"; }} 
-          subtitle={locale === "zh" ? "—— 圣三角阵法需星界连结 ——" : "—— ASTRAL BOND REQUIRED ——"}
-        />
-      </div>
-    );
-  }
 
   return (
     <div className={`relative flex flex-col overflow-x-hidden bg-[#05030a] font-sans text-zinc-50 ${appStage === "reading" ? "min-h-screen overflow-y-auto" : "h-screen overflow-hidden w-full fixed inset-0"}`}>
@@ -343,7 +383,7 @@ export default function ThreeCardSpread() {
       {/* 左上角全局控制枢纽 */}
       <div className="fixed left-4 top-4 z-[90] flex items-center gap-2.5">
         <button 
-            onClick={() => setIsSidebarOpen(true)} 
+            onClick={() => (user ? setIsSidebarOpen(true) : setShowAuthOverlay(true))} 
             className="flex items-center justify-center rounded-full border border-white/15 bg-black/45 p-1.5 backdrop-blur-md hover:bg-white/10 transition-colors shadow-lg w-11 h-11 overflow-hidden"
             >
             {user?.user_metadata?.avatar_url ? (
@@ -428,8 +468,10 @@ export default function ThreeCardSpread() {
                             setSlots(updated);
 
                             if (updated.every(s => s.isFlipped)) {
-                              track("reveal_card", { mode: "trinity", loggedIn: true, locale });
-                              triggerSpreadAIReading(updated);
+                              track("reveal_card", { mode: "trinity", loggedIn: !!user, locale });
+                              // Guests see the card meanings now and get the AI reading after logging in
+                              if (user) triggerSpreadAIReading(updated);
+                              else guestPendingRef.current = true;
                             }
                           }}
                           disabled={slot.isFlipped}
@@ -466,10 +508,21 @@ export default function ThreeCardSpread() {
                 onRetry={() => triggerSpreadAIReading(slots)}
                 question={userQuestion.trim() || undefined}
                 meanings={spreadMeanings}
+                showAiSection={!!user || !allFlipped}
                 onEditQuestion={isSelecting && slots.every(s => !s.cardName) ? () => setAppStage("asking") : undefined}
                 footer={withShare(
+                  // Guest with all three cards face up: invite them to log in for the reading
+                  !user && appStage === "reading" && allFlipped ? (
+                    <button
+                      type="button"
+                      onClick={() => { track("login_prompt_click", { mode: "trinity" }); setShowAuthOverlay(true); }}
+                      className="rounded-full border border-amber-400/30 bg-gradient-to-b from-amber-500/10 to-amber-950/50 px-8 py-3 text-xs font-bold tracking-[0.15em] text-amber-200 shadow-[0_0_30px_-5px_rgba(245,158,11,0.25)] transition-all duration-300 hover:border-amber-400/60 hover:text-amber-100 active:scale-95"
+                    >
+                      🔮 {t(locale, "loginForReading")}
+                    </button>
+                  ) :
                   // All cards face up but no reading yet (request never fired or came back empty): let the user ask for it
-                  appStage === "reading" && slots.every(s => s.isFlipped) && !isLoading && !completion && !error ? (
+                  user && appStage === "reading" && slots.every(s => s.isFlipped) && !isLoading && !completion && !error ? (
                     <button
                       type="button"
                       onClick={() => triggerSpreadAIReading(slots)}
@@ -518,7 +571,19 @@ export default function ThreeCardSpread() {
         user={user} 
         locale={locale} 
         onLogout={handleLogout} 
+        onLoginClick={() => setShowAuthOverlay(true)}
       />
+
+      {/* Login dialog for guests (avatar or "log in for reading") */}
+      {!user && (
+        <AuthWall
+          locale={locale}
+          setLocale={setLocale}
+          isOpen={showAuthOverlay}
+          onClose={() => setShowAuthOverlay(false)}
+          redirectTo={authRedirect}
+        />
+      )}
     </div>
   );
 }

@@ -160,6 +160,8 @@ export default function SingleCardReading({ mode }: { mode: SingleCardMode }) {
   }, [user, isDaily, spreadType]);
 
   const remainingToday = Math.max(0, DAILY_LIMITS.single - usedToday);
+  // 单牌问答: drawing is unlimited, only the AI reading is capped (DAILY_LIMITS.single per day)
+  const aiExhausted = !isDaily && !!user && remainingToday <= 0;
 
   // Question mode: start over for another question
   const askAnother = () => {
@@ -209,7 +211,8 @@ export default function SingleCardReading({ mode }: { mode: SingleCardMode }) {
     const realCardName = localStorage.getItem(LS("last_drawn_card")) || currentCard;
     const realIsReversed = localStorage.getItem(LS("last_card_reversed")) === "true";
 
-    if (!user) {
+    // Guests, and 单牌问答 users out of AI readings today: show the card meaning only
+    if (!user || aiExhausted) {
       setAppStage("reading");
       return; 
     }
@@ -279,7 +282,7 @@ export default function SingleCardReading({ mode }: { mode: SingleCardMode }) {
 
       // Skip if today's reading is already restored from the cloud — calling the API again
       // would burn quota (and now gets rejected by the server-side daily limit)
-      if (cachedCard && user && !todayCloudLog) {
+      if (cachedCard && user && !todayCloudLog && !aiExhausted) {
         setCurrentCard(cachedCard);
         setIsReversed(localStorage.getItem(LS("last_card_reversed")) === "true");
         setUserQuestion(cachedQuestion || "");
@@ -434,7 +437,13 @@ export default function SingleCardReading({ mode }: { mode: SingleCardMode }) {
                   question={isDaily ? undefined : userQuestion.trim() || undefined}
                   meanings={meanings}
                   onEditQuestion={!isDaily && isSelecting ? () => setAppStage("asking") : undefined}
-                  notice={error && isDailyLimitError(error) ? dailyLimitMessage(error) : undefined}
+                  notice={
+                    error && isDailyLimitError(error)
+                      ? dailyLimitMessage(error)
+                      : aiExhausted && flipped && !completion && !isLoading
+                        ? t(locale, "singleLimitReached")
+                        : undefined
+                  }
                   showAiSection={!!user || !flipped}
                   footer={flipped && !isLoading ? (
                     <div className="flex flex-col items-center gap-3">
@@ -475,18 +484,17 @@ export default function SingleCardReading({ mode }: { mode: SingleCardMode }) {
                           };
                         }}
                       />
-                      {!isDaily && user && (completion || error) && (
-                        remainingToday > 0 ? (
-                          <button
-                            type="button"
-                            onClick={askAnother}
-                            className="rounded-full border border-violet-500/40 px-6 py-2.5 text-xs tracking-[0.15em] text-violet-300 transition-colors hover:bg-violet-500/10"
-                          >
-                            {t(locale, "askAnother")} · {locale === "zh" ? `${t(locale, "remainingToday")} ${remainingToday} 次` : `${remainingToday} ${t(locale, "remainingToday")}`}
-                          </button>
-                        ) : (
-                          <span className="text-xs text-zinc-500">{t(locale, "singleLimitReached")}</span>
-                        )
+                      {/* 单牌问答: unlimited draws for everyone; the count only refers to AI readings left */}
+                      {!isDaily && (!user || aiExhausted || completion || error) && (
+                        <button
+                          type="button"
+                          onClick={askAnother}
+                          className="rounded-full border border-violet-500/40 px-6 py-2.5 text-xs tracking-[0.15em] text-violet-300 transition-colors hover:bg-violet-500/10"
+                        >
+                          {t(locale, "askAnother")}
+                          {user && remainingToday > 0 &&
+                            (locale === "zh" ? ` · AI 解读${t(locale, "remainingToday")} ${remainingToday} 次` : ` · ${remainingToday} AI readings ${t(locale, "remainingToday")}`)}
+                        </button>
                       )}
                     </div>
                   ) : undefined}

@@ -126,7 +126,9 @@ export async function POST(req: Request) {
   if ((count ?? 0) >= DAILY_LIMITS[spreadType]) {
     const msg = spreadType === "daily"
       ? (locale === "zh" ? "今日的神谕已然降临，命运之门将于明日重新开启。" : "Today's oracle has spoken. The gate reopens tomorrow.")
-      : (locale === "zh" ? "今日的三次叩问已尽，待明日星辰重新排列，再来聆听。" : "Today's three questions have been asked. Return when the stars realign tomorrow.");
+      : spreadType === "single"
+        ? (locale === "zh" ? "今日的三次 AI 解读已尽，牌面释义依然可查，待明日星辰重新排列，再来聆听完整神谕。" : "Today's three AI readings are used up. Card meanings are still yours to explore; return tomorrow for the full oracle.")
+        : (locale === "zh" ? "今日的三次叩问已尽，待明日星辰重新排列，再来聆听。" : "Today's three questions have been asked. Return when the stars realign tomorrow.");
     return textResponse(`${DAILY_LIMIT_MARKER} ${msg}`, 429);
   }
 
