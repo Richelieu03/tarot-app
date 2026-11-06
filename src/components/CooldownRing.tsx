@@ -20,9 +20,16 @@ const STROKE = 2;
 const R = (SIZE - STROKE * 2) / 2 - 4;
 const C = 2 * Math.PI * R;
 
+/** 5025000 → "01:23:45" */
+function formatClock(ms: number): string {
+  const total = Math.ceil(ms / 1000);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(Math.floor(total / 3600))}:${pad(Math.floor((total % 3600) / 60))}:${pad(total % 60)}`;
+}
+
 /**
  * A slowly closing ring of light with a drifting ember on its edge.
- * Deliberately shows no digits: the passage of time is felt, not counted.
+ * The poetic message comes first; a faint hh:mm:ss countdown sits underneath for those who want the exact time.
  */
 export default function CooldownRing({ endsAt, totalMs, onDone, children }: CooldownRingProps) {
   const [now, setNow] = useState(() => Date.now());
@@ -94,6 +101,12 @@ export default function CooldownRing({ endsAt, totalMs, onDone, children }: Cool
         >
           {children(remaining)}
         </motion.div>
+      )}
+
+      {remaining > 0 && (
+        <p className="font-mono text-[11px] tracking-[0.2em] text-zinc-500 tabular-nums">
+          {formatClock(remaining)}
+        </p>
       )}
     </div>
   );
