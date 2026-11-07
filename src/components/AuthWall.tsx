@@ -16,6 +16,19 @@ interface AuthWallProps {
   redirectTo?: string;
 }
 
+type Notice = { kind: "error" | "success"; text: string } | null;
+
+/** Turns common Supabase auth errors into friendlier wording; anything else falls back to the raw message */
+function authErrorText(message: string, locale: Locale): string {
+  const m = message.toLowerCase();
+  const zh = locale === "zh";
+  if (m.includes("invalid login credentials")) return zh ? "邮箱或密码不正确" : "Incorrect email or password.";
+  if (m.includes("email not confirmed")) return zh ? "邮箱还未验证，请先点击验证邮件里的链接" : "Please confirm your email first — check your inbox for the link.";
+  if (m.includes("already registered")) return zh ? "这个邮箱已经注册过了，请直接登录" : "This email is already registered. Please log in.";
+  if (m.includes("rate limit") || m.includes("too many")) return zh ? "操作太频繁，请稍后再试" : "Too many attempts. Please try again later.";
+  return message;
+}
+
 export default function AuthWall({ 
   locale, 
   setLocale, 
@@ -28,6 +41,8 @@ export default function AuthWall({
   const [password, setPassword] = useState("");
   const [isSignUp, setIsSignUp] = useState(false);
   const [isEmailLoading, setIsEmailLoading] = useState(false);
+  // Inline message inside the dialog (replaces browser alert())
+  const [notice, setNotice] = useState<Notice>(null);
 
   const loginWithGoogle = async () => {
     const redirectUrl = redirectTo ?? (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
@@ -35,7 +50,7 @@ export default function AuthWall({
       provider: 'google',
       options: { redirectTo: redirectUrl }
     });
-    if (error) alert("登录失败: " + error.message);
+    if (error) setNotice({ kind: "error", text: `${locale === "zh" ? "登录失败：" : "Login failed: "}${authErrorText(error.message, locale)}` });
   };
 
   const handleEmailAuth = async (e: React.FormEvent) => {
@@ -45,9 +60,10 @@ export default function AuthWall({
     
     if (!targetEmail || !targetPassword) return;
     if (targetPassword.length < 6) {
-      alert(locale === "zh" ? "🔒 密码长度至少需要 6 位哦" : "🔒 Password must be at least 6 characters.");
+      setNotice({ kind: "error", text: locale === "zh" ? "🔒 密码长度至少需要 6 位哦" : "🔒 Password must be at least 6 characters." });
       return;
     }
+    setNotice(null);
 
     setIsEmailLoading(true);
 
@@ -62,13 +78,14 @@ export default function AuthWall({
       setIsEmailLoading(false);
 
       if (error) {
-        alert(locale === "zh" ? `注册失败: ${error.message}` : `Sign up failed: ${error.message}`);
+        setNotice({ kind: "error", text: `${locale === "zh" ? "注册失败：" : "Sign up failed: "}${authErrorText(error.message, locale)}` });
       } else {
-        alert(
-          locale === "zh" 
+        setNotice({
+          kind: "success",
+          text: locale === "zh" 
             ? "🔮 验证邮件已发送！请前往您的邮箱点击激活链接。" 
-            : "🔮 Verification email sent! Please check your inbox and click the activation link."
-        );
+            : "🔮 Verification email sent! Please check your inbox and click the activation link.",
+        });
         setPassword("");
         setIsSignUp(false);
       }
@@ -79,7 +96,7 @@ export default function AuthWall({
       });
       setIsEmailLoading(false);
       if (error) {
-        alert(locale === "zh" ? `登录失败: ${error.message}` : `Login failed: ${error.message}`);
+        setNotice({ kind: "error", text: `${locale === "zh" ? "登录失败：" : "Login failed: "}${authErrorText(error.message, locale)}` });
       } else {
         setPassword("");
       }
@@ -110,7 +127,7 @@ export default function AuthWall({
             {/* 右上角 ✣ 退出键 */}
             <button 
               type="button" 
-              onClick={onClose} 
+              onClick={() => { setNotice(null); onClose(); }} 
               className="absolute right-5 top-5 z-10 flex h-9 w-9 items-center justify-center rounded-full text-zinc-400 transition-all duration-300 hover:bg-white/10 hover:text-amber-200 hover:shadow-[0_0_15px_rgba(251,191,36,0.4)] cursor-pointer"
               title={locale === "zh" ? "关闭" : "Close"}
             >
@@ -136,16 +153,35 @@ export default function AuthWall({
                 {isSignUp ? (locale === "zh" ? "输入您的邮箱与密码，开启命运书卷" : "Bind your email and password to begin.") : (locale === "zh" ? "欢迎归来，神秘学徒" : "Welcome back, seeker.")}
               </p>
 
+              <AnimatePresence>
+                {notice && (
+                  <motion.p
+                    key={notice.text}
+                    initial={{ opacity: 0, y: -4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                    role={notice.kind === "error" ? "alert" : "status"}
+                    className={`mb-2 w-full rounded-xl border px-4 py-3 text-xs leading-5 ${
+                      notice.kind === "error"
+                        ? "border-rose-400/30 bg-rose-500/10 text-rose-200"
+                        : "border-emerald-400/30 bg-emerald-500/10 text-emerald-200"
+                    }`}
+                  >
+                    {notice.text}
+                  </motion.p>
+                )}
+              </AnimatePresence>
+
               <form onSubmit={handleEmailAuth} className="w-full space-y-4 mt-2">
-                <input type="email" placeholder={locale === "zh" ? "输入您的邮箱..." : "Enter Email..."} value={email} onChange={(e) => setEmail(e.target.value)} className="w-full rounded-full border border-white/10 bg-white/[0.04] px-6 py-4 text-center text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-violet-500/50 focus:bg-white/[0.08] focus:outline-none focus:ring-1 focus:ring-violet-500/35 transition-all duration-300"/>
-                <input type="password" placeholder={isSignUp ? (locale === "zh" ? "设定登录密码 (至少6位)..." : "Set Password (min 6 chars)...") : (locale === "zh" ? "输入密码..." : "Enter Password...")} value={password} onChange={(e) => setPassword(e.target.value)} className="w-full rounded-full border border-white/10 bg-white/[0.04] px-6 py-4 text-center text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-violet-500/50 focus:bg-white/[0.08] focus:outline-none focus:ring-1 focus:ring-violet-500/35 transition-all duration-300"/>
+                <input type="email" placeholder={locale === "zh" ? "输入您的邮箱..." : "Enter Email..."} value={email} onChange={(e) => { setEmail(e.target.value); if (notice?.kind === "error") setNotice(null); }} className="w-full rounded-full border border-white/10 bg-white/[0.04] px-6 py-4 text-center text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-violet-500/50 focus:bg-white/[0.08] focus:outline-none focus:ring-1 focus:ring-violet-500/35 transition-all duration-300"/>
+                <input type="password" placeholder={isSignUp ? (locale === "zh" ? "设定登录密码 (至少6位)..." : "Set Password (min 6 chars)...") : (locale === "zh" ? "输入密码..." : "Enter Password...")} value={password} onChange={(e) => { setPassword(e.target.value); if (notice?.kind === "error") setNotice(null); }} className="w-full rounded-full border border-white/10 bg-white/[0.04] px-6 py-4 text-center text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-violet-500/50 focus:bg-white/[0.08] focus:outline-none focus:ring-1 focus:ring-violet-500/35 transition-all duration-300"/>
 
                 <button type="submit" disabled={isEmailLoading} className={`w-[220px] rounded-full py-4 text-xs font-bold tracking-widest transition-all duration-300 active:scale-[0.98] disabled:opacity-50 ${isSignUp ? "bg-violet-600 text-white hover:bg-violet-500 shadow-[0_0_25px_rgba(139,92,246,0.35)]" : "bg-zinc-100 text-black hover:bg-zinc-200"}`}>
                   {isEmailLoading ? (locale === "zh" ? "仪式进行中..." : "PROCESSING...") : isSignUp ? (locale === "zh" ? "发送验证邮件" : "SEND VERIFICATION EMAIL") : (locale === "zh" ? "登录" : "LOGIN")}
                 </button>
 
                 <div className="pt-2 text-center">
-                  <button type="button" onClick={() => { setIsSignUp(!isSignUp); setPassword(""); }} className="text-[11px] text-zinc-400 hover:text-violet-400 transition-colors underline underline-offset-4">
+                  <button type="button" onClick={() => { setIsSignUp(!isSignUp); setPassword(""); setNotice(null); }} className="text-[11px] text-zinc-400 hover:text-violet-400 transition-colors underline underline-offset-4">
                     {isSignUp ? (locale === "zh" ? "已有账号？去登录" : "Already have an account? Log in") : (locale === "zh" ? "初来乍到？点击创建新账号" : "New here? Sign up to create account")}
                   </button>
                 </div>

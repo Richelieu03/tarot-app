@@ -28,6 +28,7 @@ import { CARD_BY_ZH, getCardMeaning } from "../lib/tarot-meanings";
 import { detectTextLocale, makeExcerpt } from "../lib/share-card";
 import { parseDailyAlmanac } from "../lib/daily-almanac";
 import ShareCardButton from "./ShareCardButton";
+import Link from "next/link";
 import { useStreak } from "../hooks/useStreak";
 import { track } from "../lib/analytics";
 import { DAILY_LIMITS, DAILY_LIMIT_MARKER, dailyLimitMessage, isDailyLimitError } from "../lib/daily-limit";
@@ -508,6 +509,19 @@ export default function SingleCardReading({ mode }: { mode: SingleCardMode }) {
                           {user && remainingToday > 0 &&
                             (locale === "zh" ? ` · AI 解读${t(locale, "remainingToday")} ${remainingToday} 次` : ` · ${remainingToday} AI readings ${t(locale, "remainingToday")}`)}
                         </button>
+                      )}
+                      {/* 每日一牌 only draws one card — point people to the other modes */}
+                      {isDaily && (
+                        <p className="mt-1 text-xs text-zinc-500">
+                          {t(locale, "tryOtherModes")}
+                          <Link href="/single" onClick={() => track("mode_switch", { to: "single", from: "daily_hint" })} className="mx-1 text-violet-300 underline underline-offset-4 hover:text-violet-200">
+                            {t(locale, "modeQuestion")}
+                          </Link>
+                          /
+                          <Link href="/spread" onClick={() => track("mode_switch", { to: "three", from: "daily_hint" })} className="ml-1 text-violet-300 underline underline-offset-4 hover:text-violet-200">
+                            {t(locale, "modeSpread")}
+                          </Link>
+                        </p>
                       )}
                     </div>
                   ) : undefined}

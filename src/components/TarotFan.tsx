@@ -3,6 +3,8 @@
 
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
+import { preload } from "react-dom";
+import { CARD_BACK_SRC } from "./TarotCard";
 
 interface TarotFanProps {
   isOpen: boolean;
@@ -17,6 +19,8 @@ export default function TarotFan({
   clickedIndex,
   onSelectCard,
 }: TarotFanProps) {
+  // The fan is the first thing on screen and every card shares one back image
+  preload(CARD_BACK_SRC, { as: "image", fetchPriority: "high" });
   const [isMobile, setIsMobile] = useState(false);
   const [viewportW, setViewportW] = useState(375);
 
@@ -110,7 +114,7 @@ export default function TarotFan({
                 transition={{ type: "spring", stiffness: 260, damping: 16 }}
               >
                 <img
-                  src="/tarot/维特牌背.jpg"
+                  src={CARD_BACK_SRC}
                   className="h-full w-full object-cover pointer-events-none select-none"
                   alt="Tarot Card Back"
                   draggable={false}
