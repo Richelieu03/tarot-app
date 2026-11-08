@@ -73,7 +73,13 @@ export default function AuthWall({
         password: targetPassword,
         // The verification link often opens in a different browser (e.g. WeChat → Safari),
         // so the drawn card travels in this URL instead of relying on localStorage
-        options: { emailRedirectTo: redirectTo ?? window.location.origin },
+        // The "Confirm signup" email template links to /auth/confirm on this site (not *.supabase.co),
+        // which verifies the token and then continues to `next`.
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/confirm?next=${encodeURIComponent(
+            redirectTo ?? window.location.pathname,
+          )}`,
+        },
       });
       setIsEmailLoading(false);
 

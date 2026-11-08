@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import Script from "next/script";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
@@ -38,11 +38,22 @@ export const metadata: Metadata = {
     alternateLocale: ["en_US"],
   },
   other: { google: "notranslate" },
+  // iOS home-screen app (the manifest covers Android / desktop)
+  appleWebApp: {
+    capable: true,
+    title: "Ashley's Tarot",
+    statusBarStyle: "black",
+  },
   twitter: {
     card: "summary_large_image",
     title: "Ashley's Tarot · 神谕之门",
     description: DESCRIPTION,
   },
+};
+
+// Dark browser chrome / status bar to match the site
+export const viewport: Viewport = {
+  themeColor: "#05030a",
 };
 
 // Umami analytics: set NEXT_PUBLIC_UMAMI_WEBSITE_ID (in .env.local and on Netlify) to enable
