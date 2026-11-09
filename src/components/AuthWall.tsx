@@ -1,7 +1,7 @@
 // src/components/AuthWall.tsx
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "../lib/supabase";
 import type { Locale } from "../lib/locale";
@@ -18,6 +18,12 @@ interface AuthWallProps {
 
 type Notice = { kind: "error" | "success"; text: string } | null;
 
+/** "code" = email one-time code (default, no password, no link to click); "password" = classic email + password */
+type AuthMethod = "code" | "password";
+
+/** Seconds before another code can be requested (matches Supabase's default per-email send interval) */
+const RESEND_SECONDS = 60;
+
 /** Turns common Supabase auth errors into friendlier wording; anything else falls back to the raw message */
 function authErrorText(message: string, locale: Locale): string {
   const m = message.toLowerCase();
@@ -25,7 +31,8 @@ function authErrorText(message: string, locale: Locale): string {
   if (m.includes("invalid login credentials")) return zh ? "邮箱或密码不正确" : "Incorrect email or password.";
   if (m.includes("email not confirmed")) return zh ? "邮箱还未验证，请先点击验证邮件里的链接" : "Please confirm your email first — check your inbox for the link.";
   if (m.includes("already registered")) return zh ? "这个邮箱已经注册过了，请直接登录" : "This email is already registered. Please log in.";
-  if (m.includes("rate limit") || m.includes("too many")) return zh ? "操作太频繁，请稍后再试" : "Too many attempts. Please try again later.";
+  if (m.includes("rate limit") || m.includes("too many") || m.includes("security purposes")) return zh ? "操作太频繁，请稍后再试" : "Too many attempts. Please try again later.";
+  if (m.includes("expired") || (m.includes("invalid") && m.includes("token"))) return zh ? "验证码错误或已过期，请重新获取" : "The code is wrong or has expired. Please request a new one.";
   return message;
 }
 
@@ -43,6 +50,78 @@ export default function AuthWall({
   const [isEmailLoading, setIsEmailLoading] = useState(false);
   // Inline message inside the dialog (replaces browser alert())
   const [notice, setNotice] = useState<Notice>(null);
+
+  // Email-code (OTP) login state
+  const [method, setMethod] = useState<AuthMethod>("code");
+  const [codeSent, setCodeSent] = useState(false);
+  const [code, setCode] = useState("");
+  const [cooldown, setCooldown] = useState(0);
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const id = setTimeout(() => setCooldown((s) => s - 1), 1000);
+    return () => clearTimeout(id);
+  }, [cooldown]);
+
+  const confirmRedirect = () =>
+    `${window.location.origin}/auth/confirm?next=${encodeURIComponent(redirectTo ?? window.location.pathname)}`;
+
+  /** Sends a one-time code. Creates the account on first use, so this doubles as sign-up. */
+  const sendCode = async () => {
+    const targetEmail = email.trim();
+    if (!targetEmail || cooldown > 0) return;
+    setNotice(null);
+    setIsEmailLoading(true);
+    const { error } = await supabase.auth.signInWithOtp({
+      email: targetEmail,
+      // Only used if the email template still contains a link; the code alone is enough
+      options: { shouldCreateUser: true, emailRedirectTo: confirmRedirect() },
+    });
+    setIsEmailLoading(false);
+    if (error) {
+      setNotice({ kind: "error", text: `${locale === "zh" ? "发送失败：" : "Could not send code: "}${authErrorText(error.message, locale)}` });
+      return;
+    }
+    setCodeSent(true);
+    setCode("");
+    setCooldown(RESEND_SECONDS);
+    setNotice({
+      kind: "success",
+      text: locale === "zh"
+        ? `验证码已发送至 ${targetEmail}，没收到请看看垃圾箱`
+        : `Code sent to ${targetEmail}. Check your spam folder if it's not there.`,
+    });
+  };
+
+  /** Verifies the code; on success the auth listener in the parent picks up the session on this same page */
+  const verifyCode = async () => {
+    const token = code.replace(/\s/g, "");
+    if (!token) return;
+    setNotice(null);
+    setIsEmailLoading(true);
+    const { error } = await supabase.auth.verifyOtp({ email: email.trim(), token, type: "email" });
+    setIsEmailLoading(false);
+    if (error) {
+      setNotice({ kind: "error", text: authErrorText(error.message, locale) });
+    } else {
+      setCode("");
+      setCodeSent(false);
+    }
+  };
+
+  const handleCodeSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    void (codeSent ? verifyCode() : sendCode());
+  };
+
+  const switchMethod = (next: AuthMethod) => {
+    setMethod(next);
+    setIsSignUp(false);
+    setPassword("");
+    setCode("");
+    setCodeSent(false);
+    setNotice(null);
+  };
 
   const loginWithGoogle = async () => {
     const redirectUrl = redirectTo ?? (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
@@ -75,11 +154,7 @@ export default function AuthWall({
         // so the drawn card travels in this URL instead of relying on localStorage
         // The "Confirm signup" email template links to /auth/confirm on this site (not *.supabase.co),
         // which verifies the token and then continues to `next`.
-        options: {
-          emailRedirectTo: `${window.location.origin}/auth/confirm?next=${encodeURIComponent(
-            redirectTo ?? window.location.pathname,
-          )}`,
-        },
+        options: { emailRedirectTo: confirmRedirect() },
       });
       setIsEmailLoading(false);
 
@@ -178,6 +253,42 @@ export default function AuthWall({
                 )}
               </AnimatePresence>
 
+              {method === "code" ? (
+              <form onSubmit={handleCodeSubmit} className="w-full space-y-4 mt-2">
+                <input type="email" autoComplete="email" readOnly={codeSent} placeholder={locale === "zh" ? "输入您的邮箱..." : "Enter Email..."} value={email} onChange={(e) => { setEmail(e.target.value); if (notice?.kind === "error") setNotice(null); }} className={`w-full rounded-full border border-white/10 bg-white/[0.04] px-6 py-4 text-center text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-violet-500/50 focus:bg-white/[0.08] focus:outline-none focus:ring-1 focus:ring-violet-500/35 transition-all duration-300 ${codeSent ? "opacity-60" : ""}`}/>
+
+                {codeSent && (
+                  <input type="text" inputMode="numeric" autoComplete="one-time-code" autoFocus maxLength={10} placeholder={locale === "zh" ? "输入邮件里的验证码" : "Enter the code from your email"} value={code} onChange={(e) => { setCode(e.target.value.replace(/\D/g, "")); if (notice?.kind === "error") setNotice(null); }} className="w-full rounded-full border border-white/10 bg-white/[0.04] px-6 py-4 text-center text-lg tracking-[0.5em] text-zinc-100 placeholder:text-sm placeholder:tracking-normal placeholder:text-zinc-500 focus:border-violet-500/50 focus:bg-white/[0.08] focus:outline-none focus:ring-1 focus:ring-violet-500/35 transition-all duration-300"/>
+                )}
+
+                <button type="submit" disabled={isEmailLoading || (!codeSent && cooldown > 0)} className="w-[220px] rounded-full bg-zinc-100 py-4 text-xs font-bold tracking-widest text-black transition-all duration-300 hover:bg-zinc-200 active:scale-[0.98] disabled:opacity-50">
+                  {isEmailLoading
+                    ? (locale === "zh" ? "仪式进行中..." : "PROCESSING...")
+                    : codeSent
+                      ? (locale === "zh" ? "验证并登录" : "VERIFY & LOGIN")
+                      : (locale === "zh" ? "发送验证码" : "SEND CODE")}
+                </button>
+
+                {codeSent && (
+                  <div className="flex items-center justify-center gap-5 pt-1 text-[11px]">
+                    <button type="button" disabled={cooldown > 0 || isEmailLoading} onClick={() => void sendCode()} className="text-zinc-400 underline underline-offset-4 transition-colors hover:text-violet-400 disabled:no-underline disabled:opacity-60 disabled:hover:text-zinc-400">
+                      {cooldown > 0
+                        ? (locale === "zh" ? `重新发送 (${cooldown}s)` : `Resend (${cooldown}s)`)
+                        : (locale === "zh" ? "重新发送" : "Resend code")}
+                    </button>
+                    <button type="button" onClick={() => { setCodeSent(false); setCode(""); setNotice(null); }} className="text-zinc-400 underline underline-offset-4 transition-colors hover:text-violet-400">
+                      {locale === "zh" ? "换个邮箱" : "Change email"}
+                    </button>
+                  </div>
+                )}
+
+                <div className="pt-2 text-center">
+                  <button type="button" onClick={() => switchMethod("password")} className="text-[11px] text-zinc-400 hover:text-violet-400 transition-colors underline underline-offset-4">
+                    {locale === "zh" ? "用密码登录 / 注册" : "Use a password instead"}
+                  </button>
+                </div>
+              </form>
+              ) : (
               <form onSubmit={handleEmailAuth} className="w-full space-y-4 mt-2">
                 <input type="email" placeholder={locale === "zh" ? "输入您的邮箱..." : "Enter Email..."} value={email} onChange={(e) => { setEmail(e.target.value); if (notice?.kind === "error") setNotice(null); }} className="w-full rounded-full border border-white/10 bg-white/[0.04] px-6 py-4 text-center text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-violet-500/50 focus:bg-white/[0.08] focus:outline-none focus:ring-1 focus:ring-violet-500/35 transition-all duration-300"/>
                 <input type="password" placeholder={isSignUp ? (locale === "zh" ? "设定登录密码 (至少6位)..." : "Set Password (min 6 chars)...") : (locale === "zh" ? "输入密码..." : "Enter Password...")} value={password} onChange={(e) => { setPassword(e.target.value); if (notice?.kind === "error") setNotice(null); }} className="w-full rounded-full border border-white/10 bg-white/[0.04] px-6 py-4 text-center text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-violet-500/50 focus:bg-white/[0.08] focus:outline-none focus:ring-1 focus:ring-violet-500/35 transition-all duration-300"/>
@@ -191,7 +302,14 @@ export default function AuthWall({
                     {isSignUp ? (locale === "zh" ? "已有账号？去登录" : "Already have an account? Log in") : (locale === "zh" ? "初来乍到？点击创建新账号" : "New here? Sign up to create account")}
                   </button>
                 </div>
+
+                <div className="text-center">
+                  <button type="button" onClick={() => switchMethod("code")} className="text-[11px] text-zinc-400 hover:text-violet-400 transition-colors underline underline-offset-4">
+                    {locale === "zh" ? "用邮箱验证码登录（免密码）" : "Log in with an email code (no password)"}
+                  </button>
+                </div>
               </form>
+              )}
 
               <div className="my-6 flex w-full items-center justify-center gap-3 text-[10px] text-zinc-600 tracking-widest">
                 <div className="h-[1px] w-full bg-white/10" /><span>{locale === "zh" ? "或" : "OR"}</span><div className="h-[1px] w-full bg-white/10" />
