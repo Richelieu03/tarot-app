@@ -270,3 +270,43 @@ export function getCardMeaning(zhName: string, reversed: boolean, locale: Locale
   if (!card) return null;
   return (reversed ? card.rev : card.up)[locale];
 }
+
+// Shortened one-liners where the first sentence of `up` / `rev` runs long
+const ONE_LINER_OVERRIDES: Record<string, Partial<Record<"up" | "rev", Text>>> = {
+  "major-06": { up: { zh: "爱、和谐与价值观一致的选择", en: "Love, harmony and a values-aligned choice" } },
+  "major-16": { rev: { zh: "推迟改变，或险些发生的危机", en: "Delayed change, or a crisis narrowly avoided" } },
+  "wands-02": { rev: { zh: "害怕未知，困在舒适区里", en: "Fear of the unknown keeps you comfortable" } },
+  "wands-04": { rev: { zh: "家庭或环境的不稳定", en: "Instability or little support at home" } },
+  "wands-05": { rev: { zh: "紧张缓和，或回避该面对的冲突", en: "Tension easing, or avoiding a needed conflict" } },
+  "wands-06": { rev: { zh: "未获认可，或自我意识作祟", en: "Lack of recognition, or ego in the way" } },
+  "wands-10": { rev: { zh: "放下重担，学会分担", en: "Putting the burden down" } },
+  "wands-queen": { rev: { zh: "不安或嫉妒", en: "Insecurity or jealousy" } },
+  "cups-queen": { rev: { zh: "情绪过载，或迷失在他人的感受里", en: "Emotional overwhelm or losing yourself in others" } },
+};
+
+/** First sentence of a meaning, without its closing punctuation */
+function firstSentence(text: string, locale: Locale): string {
+  return locale === "zh" ? text.split("。")[0] : text.split(/(?<=\.)\s/)[0].replace(/\.$/, "");
+}
+
+/** Short one-line reading (share image, above the AI reading, card detail headline). */
+export function getCardOneLiner(card: TarotCard, reversed: boolean, locale: Locale): string {
+  const key = reversed ? "rev" : "up";
+  const override = ONE_LINER_OVERRIDES[card.id]?.[key];
+  return override ? override[locale] : firstSentence(card[key][locale], locale);
+}
+
+/** One-liner looked up by Chinese card name (the identifier the pages use); null if unknown. */
+export function getOneLinerByZh(zhName: string, reversed: boolean, locale: Locale): string | null {
+  const card = CARD_BY_ZH[zhName];
+  return card ? getCardOneLiner(card, reversed, locale) : null;
+}
+
+/** The pre-written meaning after its first sentence (the part the one-liner doesn't cover); "" if none. */
+export function getMeaningRestByZh(zhName: string, reversed: boolean, locale: Locale): string {
+  const card = CARD_BY_ZH[zhName];
+  if (!card) return "";
+  const text = card[reversed ? "rev" : "up"][locale];
+  const i = locale === "zh" ? text.indexOf("。") : text.search(/\.\s/);
+  return i < 0 ? "" : text.slice(i + 1).trim();
+}

@@ -17,6 +17,7 @@ import { supabase } from "../lib/supabase";
 import { useAuth } from "../hooks/useAuth"; 
 
 import AuthWall from "./AuthWall";
+import CardFocusOverlay from "./CardFocusOverlay";
 import Sidebar from "./Sidebar";
 import TarotCard from "./TarotCard"; 
 import LocaleSwitcher from "./LocaleSwitcher"; 
@@ -24,7 +25,7 @@ import TarotFan from "./TarotFan";
 import ReadingBox from "./ReadingBox";
 import SpreadSelector from "./SpreadSelector";
 import { getAvatarColor, getInitial } from "../lib/utils";
-import { CARD_BY_ZH, getCardMeaning } from "../lib/tarot-meanings";
+import { CARD_BY_ZH, getMeaningRestByZh, getOneLinerByZh } from "../lib/tarot-meanings";
 import { detectTextLocale, makeExcerpt } from "../lib/share-card";
 import { parseDailyAlmanac } from "../lib/daily-almanac";
 import ShareCardButton from "./ShareCardButton";
@@ -58,6 +59,8 @@ export default function SingleCardReading({ mode }: { mode: SingleCardMode }) {
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showAuthOverlay, setShowAuthOverlay] = useState(false);
+  // Tapping the revealed card opens a full-screen view of it
+  const [focusOpen, setFocusOpen] = useState(false);
 
   const { user, session, appLoaded, todayCloudLog, handleLogout } = useAuth(locale, setLocale, spreadType);
   // Question mode: successful readings today (server enforces DAILY_LIMITS.single)
@@ -206,6 +209,7 @@ export default function SingleCardReading({ mode }: { mode: SingleCardMode }) {
   const handleMainCardClick = () => {
     if (flipped || isSelecting) return;
     track("reveal_card", { mode: spreadType, loggedIn: !!user, locale });
+    setFocusOpen(false);
 
     setFlipped(true);
     
@@ -321,11 +325,12 @@ export default function SingleCardReading({ mode }: { mode: SingleCardMode }) {
         : t(locale, "readingWait");
 
   // Pre-written meaning: free for everyone, no API call
-  const cardMeaning = flipped ? getCardMeaning(currentCard, isReversed, locale) : null;
-  const meanings = cardMeaning
+  const cardOneLiner = flipped ? getOneLinerByZh(currentCard, isReversed, locale) : null;
+  const meanings = cardOneLiner
     ? [{
         label: `${getCardDisplayName(currentCard, locale)} (${isReversed ? t(locale, "reversed") : t(locale, "upright")})`,
-        text: cardMeaning,
+        text: cardOneLiner,
+        more: getMeaningRestByZh(currentCard, isReversed, locale),
       }]
     : undefined;
 
@@ -406,8 +411,8 @@ export default function SingleCardReading({ mode }: { mode: SingleCardMode }) {
                       oracleBadge={t(locale, "oracleBadge")}
                       isReversed={isReversed}
                       isFlipped={flipped}
-                      onClick={handleMainCardClick}
-                      disabled={flipped}
+                      onClick={flipped ? () => { track("card_focus", { mode: spreadType }); setFocusOpen(true); } : handleMainCardClick}
+                      disabled={flipped && isSelecting}
                     />
                   </div>
                 )}
@@ -488,11 +493,13 @@ export default function SingleCardReading({ mode }: { mode: SingleCardMode }) {
                               label: getCardDisplayName(currentCard, cl),
                               orientation: isReversed ? t(cl, "reversed") : t(cl, "upright"),
                               reversed: isReversed,
+                              tagline: getOneLinerByZh(currentCard, isReversed, cl) ?? undefined,
                             }],
                             question: isDaily ? undefined : userQuestion.trim() || undefined,
                             excerpt: usable
                               ? makeExcerpt(parsed ? parsed.body : reading, cl === "zh" ? 50 : 120)
-                              : getCardMeaning(currentCard, isReversed, cl) ?? undefined,
+                              // no AI reading: the one-liner sits under the card, so quote the rest of the meaning
+                              : getMeaningRestByZh(currentCard, isReversed, cl) || undefined,
                             almanac: parsed && (parsed.dos.length || parsed.donts.length) ? { dos: parsed.dos, donts: parsed.donts } : undefined,
                             streak: dailyDone && streak.current > 0 ? streak.current : undefined,
                           };
@@ -549,6 +556,13 @@ export default function SingleCardReading({ mode }: { mode: SingleCardMode }) {
         onLogout={handleLogout} 
         onLoginClick={() => setShowAuthOverlay(true)}
         currentSpread="single"
+      />
+
+      <CardFocusOverlay
+        cardName={focusOpen && flipped ? currentCard : null}
+        isReversed={isReversed}
+        locale={locale}
+        onClose={() => setFocusOpen(false)}
       />
 
       {/* 🌟 完美的全局居中悬浮毛玻璃 AuthWall 弹窗 */}

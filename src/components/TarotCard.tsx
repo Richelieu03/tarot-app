@@ -56,7 +56,7 @@ export default function TarotCard({
         onClick={!disabled ? onClick : undefined}
         className={`relative h-full w-full rounded-none [transform-style:preserve-3d] ${
           !isFlipped && !disabled ? "cursor-pointer transition-shadow hover:shadow-[0_0_30px_rgba(167,139,250,0.3)]" : ""
-        }`}
+        } ${isFlipped && !disabled && onClick ? "cursor-zoom-in" : ""}`}
         animate={{ rotateY: isFlipped ? 180 : 0 }}
         transition={{ layout: { type: "spring", stiffness: 200, damping: 25 }, duration: 0.8 }}
       >

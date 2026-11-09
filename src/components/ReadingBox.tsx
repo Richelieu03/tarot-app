@@ -18,8 +18,9 @@ interface ReadingBoxProps {
   className?: string;
   /** The user's question, echoed back above the reading */
   question?: string;
-  /** Pre-written card meanings; shown to everyone, no API call needed */
-  meanings?: { label: string; text: string }[];
+  /** Pre-written one-line readings; shown to everyone, no API call needed.
+   *  `more` (rest of the pre-written meaning) is only shown when there is no AI reading. */
+  meanings?: { label: string; text: string; more?: string }[];
   /** false hides the AI reading area (e.g. guests) */
   showAiSection?: boolean;
   /** Rendered at the bottom of the box (e.g. login call-to-action) */
@@ -51,6 +52,7 @@ export default function ReadingBox({
   almanac,
 }: ReadingBoxProps) {
   const hasMeanings = !!meanings && meanings.length > 0;
+  const showMore = !showAiSection || !!notice;
   return (
     <div className={`relative z-20 w-full max-w-lg md:max-w-2xl ${className}`}>
       <div className="border border-white/5 bg-white/5 p-6 shadow-xl backdrop-blur-2xl">
@@ -90,12 +92,17 @@ export default function ReadingBox({
           <div className="mb-2 space-y-3 text-left">
             <div className="text-[10px] tracking-widest text-amber-400/70">{t(locale, "meaningTitle")}</div>
             {meanings!.map((m) => (
-              <p key={m.label} className="text-sm leading-7 text-zinc-300">
-                <span className="font-semibold text-zinc-100">{m.label}</span>
-                <span className="mx-2 text-zinc-600">·</span>
-                {m.text}
-              </p>
+              <div key={m.label}>
+                <p className="text-sm leading-7 text-zinc-300">
+                  <span className="font-semibold text-zinc-100">{m.label}</span>
+                  <span className="mx-2 text-zinc-600">·</span>
+                  <span className="text-amber-100/90">{m.text}</span>
+                </p>
+                {showMore && m.more && <p className="text-sm leading-7 text-zinc-400">{m.more}</p>}
+              </div>
             ))}
+            {/* Placeholder copy — feel free to change */}
+            <p className="text-[11px] text-zinc-600">{locale === "zh" ? "轻点牌面，查看这张牌的详细解读" : "Tap a card to read more about it"}</p>
           </div>
         )}
 

@@ -9,11 +9,11 @@ import { pickRandomTarotCard } from "../../lib/draw-random";
 import type { Locale } from "../../lib/locale";
 import { LOCALE_STORAGE_KEY, getInitialLocale } from "../../lib/locale";
 import { getCardDisplayName } from "../../lib/tarot-labels";
-import { isEnergyRecoveryBlock, t } from "../../lib/ui-i18n";
+import { isEnergyRecoveryBlock, t, type UiKey } from "../../lib/ui-i18n";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../hooks/useAuth"; 
 import { getAvatarColor, getInitial } from "../../lib/utils";
-import { CARD_BY_ZH, getCardMeaning } from "../../lib/tarot-meanings";
+import { CARD_BY_ZH, getMeaningRestByZh, getOneLinerByZh } from "../../lib/tarot-meanings";
 import { DAILY_LIMITS, DAILY_LIMIT_MARKER, SPREAD_COOLDOWN_MS, cooldownMessage, dailyLimitMessage, isDailyLimitError } from "../../lib/daily-limit";
 import { useDrawLogger } from "../../hooks/useDrawLogger"; 
 
@@ -23,6 +23,7 @@ import TarotCard from "../../components/TarotCard";
 import LocaleSwitcher from "../../components/LocaleSwitcher"; 
 import TarotFan from "../../components/TarotFan"; 
 import ReadingBox from "../../components/ReadingBox";
+import CardFocusOverlay from "../../components/CardFocusOverlay";
 import SpreadSelector from "../../components/SpreadSelector"; 
 import CooldownRing from "../../components/CooldownRing";
 import { track } from "../../lib/analytics";
@@ -61,6 +62,8 @@ export default function ThreeCardSpread() {
   const [isSelecting, setIsSelecting] = useState(true);
   
   const [slots, setSlots] = useState<CardSlot[]>(INITIAL_SLOTS);
+  // Index of the revealed slot shown full-screen, or null
+  const [focusIdx, setFocusIdx] = useState<number | null>(null);
   // Successful three-card readings today (server enforces DAILY_LIMITS.trinity)
   const [usedToday, setUsedToday] = useState(0);
   const restoredRef = useRef(false);
@@ -333,7 +336,8 @@ export default function ThreeCardSpread() {
   const spreadMeanings = slots.every(s => s.isFlipped && s.cardName)
     ? slots.map(s => ({
         label: `${t(locale, s.labelKey as any)} · ${getCardDisplayName(s.cardName!, locale)} (${s.isReversed ? t(locale, "reversed") : t(locale, "upright")})`,
-        text: getCardMeaning(s.cardName!, s.isReversed, locale) ?? "",
+        text: getOneLinerByZh(s.cardName!, s.isReversed, locale) ?? "",
+        more: getMeaningRestByZh(s.cardName!, s.isReversed, locale),
       }))
     : undefined;
 
@@ -359,12 +363,11 @@ export default function ThreeCardSpread() {
                 label: getCardDisplayName(s.cardName!, cl),
                 orientation: s.isReversed ? t(cl, "reversed") : t(cl, "upright"),
                 reversed: s.isReversed,
+                tagline: getOneLinerByZh(s.cardName!, s.isReversed, cl) ?? undefined,
               })),
               question: userQuestion.trim() || undefined,
-              excerpt: hasReading
-                ? makeExcerpt(completion, cl === "zh" ? 100 : 220)
-                // guest: the three pre-written meanings
-                : slots.map(s => getCardMeaning(s.cardName!, s.isReversed, cl)).filter(Boolean).join(cl === "zh" ? "" : " "),
+              // guest: no quote — each card already carries its one-liner
+              excerpt: hasReading ? makeExcerpt(completion, cl === "zh" ? 100 : 220) : undefined,
             };
           }}
         />
@@ -462,7 +465,9 @@ export default function ThreeCardSpread() {
                           isReversed={slot.isReversed}
                           isFlipped={slot.isFlipped}
                           onClick={() => {
-                            if (slot.isFlipped || isSelecting) return;
+                            if (isSelecting) return;
+                            if (slot.isFlipped) { track("card_focus", { mode: "trinity" }); setFocusIdx(idx); return; }
+                            setFocusIdx(null);
                             // Copy the slot instead of mutating state in place
                             const updated = slots.map((s, i) => (i === idx ? { ...s, isFlipped: true } : s));
                             setSlots(updated);
@@ -474,7 +479,7 @@ export default function ThreeCardSpread() {
                               else guestPendingRef.current = true;
                             }
                           }}
-                          disabled={slot.isFlipped}
+                          disabled={slot.isFlipped && isSelecting}
                         />
                       </motion.div>
                     );
@@ -572,6 +577,14 @@ export default function ThreeCardSpread() {
         locale={locale} 
         onLogout={handleLogout} 
         onLoginClick={() => setShowAuthOverlay(true)}
+      />
+
+      <CardFocusOverlay
+        cardName={focusIdx !== null ? slots[focusIdx]?.cardName ?? null : null}
+        isReversed={focusIdx !== null ? !!slots[focusIdx]?.isReversed : false}
+        positionLabel={focusIdx !== null ? t(locale, slots[focusIdx].labelKey as UiKey) : undefined}
+        locale={locale}
+        onClose={() => setFocusIdx(null)}
       />
 
       {/* Login dialog for guests (avatar or "log in for reading") */}

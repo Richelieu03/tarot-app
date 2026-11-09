@@ -6,7 +6,7 @@ import type { Locale } from "./locale";
 export interface ShareCardInput {
   locale: Locale;
   /** One entry for a single draw, three for a spread */
-  cards: { name: string; label: string; orientation: string; reversed: boolean; position?: string }[];
+  cards: { name: string; label: string; orientation: string; reversed: boolean; position?: string; tagline?: string }[];
   question?: string;
   /** Short quote shown at the bottom (AI excerpt or pre-written meaning) */
   excerpt?: string;
@@ -195,6 +195,7 @@ export async function renderShareCard(input: ShareCardInput): Promise<Blob> {
   const totalW = cardW * input.cards.length + gap * (input.cards.length - 1);
   const top = 250;
 
+  let cardsBottom = 0;
   input.cards.forEach((c, i) => {
     const x = (W - totalW) / 2 + i * (cardW + gap);
     drawCard(ctx, images[i], x, top, cardW, cardH, c.reversed);
@@ -208,10 +209,23 @@ export async function renderShareCard(input: ShareCardInput): Promise<Blob> {
     ctx.fillStyle = c.reversed ? "rgba(252, 211, 77, 0.9)" : "rgba(196, 181, 253, 0.95)";
     ctx.font = `400 ${isSingle ? 28 : 24}px ${SANS}`;
     ctx.fillText(c.orientation, cx, ty);
+
+    // one-line reading under the orientation
+    if (c.tagline) {
+      ty += isSingle ? 50 : 40;
+      ctx.fillStyle = "rgba(254, 243, 199, 0.85)";
+      ctx.font = `400 ${isSingle ? 30 : 22}px ${serif}`;
+      const lines = wrapText(ctx, c.tagline, isSingle ? W - 240 : cardW + gap - 12, 2);
+      lines.forEach((line, li) => {
+        if (li > 0) ty += isSingle ? 42 : 32;
+        ctx.fillText(line, cx, ty);
+      });
+    }
+    cardsBottom = Math.max(cardsBottom, ty);
   });
 
   // ── question ──
-  let y = top + cardH + (isSingle ? 200 : 170);
+  let y = cardsBottom + (isSingle ? 90 : 80);
   if (input.question) {
     ctx.fillStyle = "rgba(161, 161, 170, 0.95)";
     ctx.font = `400 28px ${SANS}`;
