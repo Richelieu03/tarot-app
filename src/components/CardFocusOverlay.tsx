@@ -8,6 +8,7 @@ import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import type { Locale } from "../lib/locale";
 import { CARD_BY_ZH } from "../lib/tarot-meanings";
+import { getCardDisplayName } from "../lib/tarot-labels";
 import CardDetail from "./CardDetail";
 
 interface CardFocusOverlayProps {
@@ -76,7 +77,7 @@ export default function CardFocusOverlay({ cardName, isReversed, locale, positio
           onTouchEnd={onTouchEnd}
           role="dialog"
           aria-modal="true"
-          aria-label={card.name[locale]}
+          aria-label={getCardDisplayName(card.name.zh, locale)}
           className="fixed inset-0 z-[150] flex items-start justify-center overflow-y-auto bg-[#05030a]/90 cursor-zoom-out px-4 py-14 backdrop-blur-sm"
         >
           {/* key: remount (fresh orientation state) when a different card opens */}

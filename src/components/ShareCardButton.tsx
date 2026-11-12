@@ -24,6 +24,21 @@ export default function ShareCardButton({ locale, getInput }: ShareCardButtonPro
   // Release the object URL when the preview closes / changes
   useEffect(() => () => { if (url) URL.revokeObjectURL(url); }, [url]);
 
+  // Lock page scrolling while the preview is open (html + body: iOS Safari ignores body alone)
+  useEffect(() => {
+    if (!url) return;
+    const html = document.documentElement;
+    const prev = { html: html.style.overflow, body: document.body.style.overflow, touch: document.body.style.touchAction };
+    html.style.overflow = "hidden";
+    document.body.style.overflow = "hidden";
+    document.body.style.touchAction = "none";
+    return () => {
+      html.style.overflow = prev.html;
+      document.body.style.overflow = prev.body;
+      document.body.style.touchAction = prev.touch;
+    };
+  }, [url]);
+
   const open = async () => {
     if (busy) return;
     setBusy(true);
@@ -76,7 +91,7 @@ export default function ShareCardButton({ locale, getInput }: ShareCardButtonPro
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={close}
-            className="fixed inset-0 z-[220] flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm"
+            className="fixed inset-0 z-[220] flex items-center justify-center overscroll-contain bg-black/85 p-4 backdrop-blur-sm"
           >
             <motion.div
               initial={{ scale: 0.96, y: 10 }}

@@ -16,6 +16,58 @@ export interface ShareCardInput {
   almanac?: { dos: string[]; donts: string[] };
   /** Daily check-in streak, shown in the header ("连续第 5 日") */
   streak?: number;
+  /** 每日一牌 six-axis scores; when present (single card) the card moves left and the radar sits on the right */
+  radar?: { labels: string[]; values: number[]; focus: boolean[] };
+}
+
+/** Six-axis radar on the canvas, centred at (cx, cy) with outer radius r */
+function drawRadar(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, radar: NonNullable<ShareCardInput["radar"]>, serif: string) {
+  const n = radar.values.length;
+  const at = (i: number, v: number): [number, number] => {
+    const a = -Math.PI / 2 + (i * Math.PI * 2) / n;
+    return [cx + (v / 10) * r * Math.cos(a), cy + (v / 10) * r * Math.sin(a)];
+  };
+  const path = (vals: number[]) => {
+    ctx.beginPath();
+    vals.forEach((v, i) => { const [x, y] = at(i, v); if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); });
+    ctx.closePath();
+  };
+  ctx.save();
+  // rings + spokes
+  for (const v of [2, 4, 6, 8, 10]) {
+    path(radar.values.map(() => v));
+    ctx.strokeStyle = v === 10 ? "rgba(255,255,255,0.22)" : "rgba(255,255,255,0.09)";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+  for (let i = 0; i < n; i++) {
+    const [x, y] = at(i, 10);
+    ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(x, y);
+    ctx.strokeStyle = "rgba(255,255,255,0.09)"; ctx.stroke();
+  }
+  // score shape
+  const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+  grad.addColorStop(0, "rgba(251,191,36,0.38)");
+  grad.addColorStop(1, "rgba(139,92,246,0.4)");
+  path(radar.values);
+  ctx.fillStyle = grad; ctx.fill();
+  ctx.strokeStyle = "rgba(253,230,138,0.9)"; ctx.lineWidth = 3; ctx.lineJoin = "round"; ctx.stroke();
+  radar.values.forEach((v, i) => {
+    const [x, y] = at(i, v);
+    ctx.beginPath(); ctx.arc(x, y, 6, 0, Math.PI * 2); ctx.fillStyle = "#fde68a"; ctx.fill();
+  });
+  // labels + values
+  ctx.textAlign = "center";
+  radar.labels.forEach((label, i) => {
+    const [x, y] = at(i, 13.4);
+    ctx.fillStyle = radar.focus[i] ? "#fcd34d" : "rgba(212,212,216,0.9)";
+    ctx.font = `400 28px ${serif}`;
+    ctx.fillText(label, x, y - 4);
+    ctx.fillStyle = radar.focus[i] ? "#fde68a" : "#f4f4f5";
+    ctx.font = `600 34px ${serif}`;
+    ctx.fillText(String(radar.values[i]), x, y + 34);
+  });
+  ctx.restore();
 }
 
 const W = 1080;
@@ -189,18 +241,33 @@ export async function renderShareCard(input: ShareCardInput): Promise<Blob> {
   );
 
   const isSingle = input.cards.length === 1;
-  const cardW = isSingle ? 340 : 270;
+  // Daily card with scores: card on the left, radar on the right, text centred underneath
+  const withRadar = isSingle && !!input.radar;
+  const cardW = withRadar ? 320 : isSingle ? 340 : 270;
   const cardH = Math.round((cardW * 43) / 25);
   const gap = isSingle ? 0 : 42;
   const totalW = cardW * input.cards.length + gap * (input.cards.length - 1);
-  const top = 250;
+  let top = 250;
+  if (withRadar) {
+    // Centre the whole block (card + radar, name, one-liner, 宜/忌) between the title and the footer
+    ctx.font = `400 30px ${serif}`;
+    const taglineLines = input.cards[0].tagline ? wrapText(ctx, input.cards[0].tagline, W - 240, 2).length : 0;
+    const almanacRows = input.almanac ? [input.almanac.dos, input.almanac.donts].filter((r) => r.length > 0).length : 0;
+    const blockH = cardH + 64 + 46
+      + (taglineLines ? 50 + (taglineLines - 1) * 42 : 0)
+      + (almanacRows ? 80 + 70 + (almanacRows - 1) * 52 : 0);
+    const areaTop = 230;
+    const areaBottom = H - 190;
+    top = areaTop + Math.max(0, Math.round((areaBottom - areaTop - blockH) / 2));
+  }
 
   let cardsBottom = 0;
   input.cards.forEach((c, i) => {
-    const x = (W - totalW) / 2 + i * (cardW + gap);
+    const x = withRadar ? 125 : (W - totalW) / 2 + i * (cardW + gap);
     drawCard(ctx, images[i], x, top, cardW, cardH, c.reversed);
+    if (withRadar) drawRadar(ctx, 745, top + cardH / 2, 165, input.radar!, serif);
 
-    const cx = x + cardW / 2;
+    const cx = withRadar ? W / 2 : x + cardW / 2;
     let ty = top + cardH + (isSingle ? 64 : 52);
     ctx.fillStyle = "#ffffff";
     ctx.font = `600 ${isSingle ? 46 : 32}px ${serif}`;
@@ -215,7 +282,7 @@ export async function renderShareCard(input: ShareCardInput): Promise<Blob> {
       ty += isSingle ? 50 : 40;
       ctx.fillStyle = "rgba(254, 243, 199, 0.85)";
       ctx.font = `400 ${isSingle ? 30 : 22}px ${serif}`;
-      const lines = wrapText(ctx, c.tagline, isSingle ? W - 240 : cardW + gap - 12, 2);
+      const lines = wrapText(ctx, c.tagline, isSingle ? W - 240 : cardW + gap - 12, isSingle ? 2 : 3);
       lines.forEach((line, li) => {
         if (li > 0) ty += isSingle ? 42 : 32;
         ctx.fillText(line, cx, ty);
@@ -226,6 +293,13 @@ export async function renderShareCard(input: ShareCardInput): Promise<Blob> {
 
   // ── question ──
   let y = cardsBottom + (isSingle ? 90 : 80);
+  if (withRadar && input.almanac && (input.almanac.dos.length || input.almanac.donts.length)) {
+    // a small divider between the one-liner and 宜/忌 (the 宜/忌 block adds its own 14px)
+    ctx.fillStyle = "rgba(251, 191, 36, 0.6)";
+    ctx.font = `400 26px ${SANS}`;
+    ctx.fillText("—  ✧  —", W / 2, cardsBottom + 80);
+    y = cardsBottom + 80 + 70 - 14;
+  }
   if (input.question) {
     ctx.fillStyle = "rgba(161, 161, 170, 0.95)";
     ctx.font = `400 28px ${SANS}`;

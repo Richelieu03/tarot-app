@@ -46,6 +46,7 @@ const RANK_EN: Record<string, string> = {
   侍从: "Page",
   骑士: "Knight",
   圣母: "Queen",
+  皇后: "Queen",
   国王: "King",
 };
 
@@ -61,7 +62,8 @@ function minorZhToEn(zh: string): string | null {
 }
 
 /** 用于界面展示：资源路径仍用中文文件名（/tarot/愚者.jpg） */
+// Queens keep "圣母" in their internal name (image files, DrawLog.card_name, localStorage) but display as "皇后"
 export function getCardDisplayName(zhName: string, locale: Locale): string {
-  if (locale === "zh") return zhName;
+  if (locale === "zh") return zhName.replace(/圣母$/, "皇后");
   return MAJOR_EN[zhName] ?? minorZhToEn(zhName) ?? zhName;
 }

@@ -13,7 +13,7 @@ import { isEnergyRecoveryBlock, t, type UiKey } from "../../lib/ui-i18n";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../hooks/useAuth"; 
 import { getAvatarColor, getInitial } from "../../lib/utils";
-import { CARD_BY_ZH, getMeaningRestByZh, getOneLinerByZh } from "../../lib/tarot-meanings";
+import { CARD_BY_ZH, getOneLinerByZh } from "../../lib/tarot-meanings";
 import { DAILY_LIMITS, DAILY_LIMIT_MARKER, SPREAD_COOLDOWN_MS, cooldownMessage, dailyLimitMessage, isDailyLimitError } from "../../lib/daily-limit";
 import { useDrawLogger } from "../../hooks/useDrawLogger"; 
 
@@ -28,7 +28,7 @@ import SpreadSelector from "../../components/SpreadSelector";
 import CooldownRing from "../../components/CooldownRing";
 import { track } from "../../lib/analytics";
 import ShareCardButton from "../../components/ShareCardButton";
-import { detectTextLocale, makeExcerpt } from "../../lib/share-card";
+import { detectTextLocale } from "../../lib/share-card";
 import type { ReactNode } from "react";
 
 type AppStage = "asking" | "selecting" | "reading";
@@ -337,7 +337,6 @@ export default function ThreeCardSpread() {
     ? slots.map(s => ({
         label: `${t(locale, s.labelKey as any)} · ${getCardDisplayName(s.cardName!, locale)} (${s.isReversed ? t(locale, "reversed") : t(locale, "upright")})`,
         text: getOneLinerByZh(s.cardName!, s.isReversed, locale) ?? "",
-        more: getMeaningRestByZh(s.cardName!, s.isReversed, locale),
       }))
     : undefined;
 
@@ -366,8 +365,6 @@ export default function ThreeCardSpread() {
                 tagline: getOneLinerByZh(s.cardName!, s.isReversed, cl) ?? undefined,
               })),
               question: userQuestion.trim() || undefined,
-              // guest: no quote — each card already carries its one-liner
-              excerpt: hasReading ? makeExcerpt(completion, cl === "zh" ? 100 : 220) : undefined,
             };
           }}
         />

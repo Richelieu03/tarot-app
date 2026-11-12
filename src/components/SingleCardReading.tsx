@@ -18,6 +18,10 @@ import { useAuth } from "../hooks/useAuth";
 
 import AuthWall from "./AuthWall";
 import CardFocusOverlay from "./CardFocusOverlay";
+import DailyRadar from "./DailyRadar";
+import DailyStage from "./DailyStage";
+import { DIMENSIONS, computeDailyScores, dayKeyFromOffset, dimensionLabel } from "../lib/daily-scores";
+import { hasProfile, sanitizeProfile } from "../lib/profile";
 import Sidebar from "./Sidebar";
 import TarotCard from "./TarotCard"; 
 import LocaleSwitcher from "./LocaleSwitcher"; 
@@ -25,8 +29,8 @@ import TarotFan from "./TarotFan";
 import ReadingBox from "./ReadingBox";
 import SpreadSelector from "./SpreadSelector";
 import { getAvatarColor, getInitial } from "../lib/utils";
-import { CARD_BY_ZH, getMeaningRestByZh, getOneLinerByZh } from "../lib/tarot-meanings";
-import { detectTextLocale, makeExcerpt } from "../lib/share-card";
+import { CARD_BY_ZH, getOneLinerByZh } from "../lib/tarot-meanings";
+import { detectTextLocale } from "../lib/share-card";
 import { parseDailyAlmanac } from "../lib/daily-almanac";
 import ShareCardButton from "./ShareCardButton";
 import Link from "next/link";
@@ -330,12 +334,23 @@ export default function SingleCardReading({ mode }: { mode: SingleCardMode }) {
     ? [{
         label: `${getCardDisplayName(currentCard, locale)} (${isReversed ? t(locale, "reversed") : t(locale, "upright")})`,
         text: cardOneLiner,
-        more: getMeaningRestByZh(currentCard, isReversed, locale),
       }]
     : undefined;
 
   // Daily card: 宜/忌 lines are shown as tags, so take them out of the paragraph text
   const daily = isDaily ? parseDailyAlmanac(completion) : null;
+
+  // Six-axis radar for 每日一牌 (guests get the card's base scores; a saved profile adds personal bonuses)
+  const profile = user ? sanitizeProfile(user.user_metadata?.profile) : undefined;
+  const radarCard = isDaily && flipped ? CARD_BY_ZH[currentCard] : undefined;
+  const radar = radarCard
+    ? computeDailyScores(radarCard, isReversed, {
+        profile,
+        seed: user?.id ?? "guest",
+        dayKey: dayKeyFromOffset(new Date().getTimezoneOffset()),
+        locale,
+      })
+    : null;
   const displayCompletion = daily ? daily.body : completion;
 
   // Daily check-in streak (签到): today counts once a 每日一牌 reading has come through
@@ -399,10 +414,20 @@ export default function SingleCardReading({ mode }: { mode: SingleCardMode }) {
               <h1 className="mt-10 max-sm:mt-20 text-2xl font-semibold tracking-tight text-zinc-100 sm:text-4xl">{t(locale, "title")}</h1>
               <p className="mt-4 text-sm text-zinc-400">{subtitleMain}</p>
 
-              <div className="my-3 flex items-center justify-center ">
+              <div className="my-3 flex w-full items-center justify-center ">
                 <AnimatePresence mode="wait">
                 {!isSelecting && (
-                  <div className="mb-6 flex items-center justify-center ">
+                  <DailyStage
+                    radar={radar ? (active) => (
+                      <DailyRadar
+                        result={radar}
+                        locale={locale}
+                        profile={profile}
+                        showProfileHint={!profile || !hasProfile(profile)}
+                        active={active}
+                      />
+                    ) : null}
+                    card={
                     <TarotCard
                       layoutId={clickedIndex !== null ? `fan-card-${clickedIndex}` : "tarot-main-card"}
                       cardName={currentCard}
@@ -414,7 +439,8 @@ export default function SingleCardReading({ mode }: { mode: SingleCardMode }) {
                       onClick={flipped ? () => { track("card_focus", { mode: spreadType }); setFocusOpen(true); } : handleMainCardClick}
                       disabled={flipped && isSelecting}
                     />
-                  </div>
+                    }
+                  />
                 )}
                 </AnimatePresence>
               </div>
@@ -496,12 +522,15 @@ export default function SingleCardReading({ mode }: { mode: SingleCardMode }) {
                               tagline: getOneLinerByZh(currentCard, isReversed, cl) ?? undefined,
                             }],
                             question: isDaily ? undefined : userQuestion.trim() || undefined,
-                            excerpt: usable
-                              ? makeExcerpt(parsed ? parsed.body : reading, cl === "zh" ? 50 : 120)
-                              // no AI reading: the one-liner sits under the card, so quote the rest of the meaning
-                              : getMeaningRestByZh(currentCard, isReversed, cl) || undefined,
                             almanac: parsed && (parsed.dos.length || parsed.donts.length) ? { dos: parsed.dos, donts: parsed.donts } : undefined,
                             streak: dailyDone && streak.current > 0 ? streak.current : undefined,
+                            radar: radar
+                              ? {
+                                  labels: DIMENSIONS.map((d) => dimensionLabel(d, cl, profile)),
+                                  values: DIMENSIONS.map((d) => radar.scores[d]),
+                                  focus: DIMENSIONS.map((d) => radar.focus.includes(d)),
+                                }
+                              : undefined,
                           };
                         }}
                       />
@@ -541,6 +570,12 @@ export default function SingleCardReading({ mode }: { mode: SingleCardMode }) {
                   }}
                 />
 
+                {/* Disclaimer for the daily scores, at the very bottom of the page */}
+                {radar && (
+                  <p className="mt-10 pb-8 text-center text-[10px] tracking-widest text-zinc-600">
+                    {locale === "zh" ? "六维评分仅供娱乐参考" : "Daily scores are for fun and reflection only"}
+                  </p>
+                )}
               </div>
             </motion.div>
           )}

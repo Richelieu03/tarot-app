@@ -2,6 +2,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { CARD_GROUPS, cardImage, cardsInGroup } from "../../lib/card-groups";
+import { getCardDisplayName } from "../../lib/tarot-labels";
+import type { TarotCard } from "../../lib/tarot-meanings";
+
+/** Display name (queens show "皇后"); card.name.zh stays the internal id */
+const zhTitle = (c: TarotCard) => getCardDisplayName(c.name.zh, "zh");
 
 export const metadata: Metadata = {
   title: "牌义图鉴 Card Library",
@@ -51,10 +56,10 @@ export default function CardLibrary() {
                 <Link key={card.id} href={`/cards/${card.id}`} className="group flex flex-col items-center gap-2 text-center">
                   <div className="aspect-[25/43] w-full overflow-hidden border border-white/10 bg-[#0a0612] shadow-lg transition-all duration-300 group-hover:-translate-y-1 group-hover:border-amber-400/50 group-hover:shadow-[0_0_25px_rgba(140,90,255,0.4)]">
                     {/* eslint-disable-next-line @next/next/no-img-element -- plain static images, lazy-loaded */}
-                    <img src={cardImage(card)} alt={`${card.name.zh} ${card.name.en}`} loading="lazy" className="h-full w-full object-cover" />
+                    <img src={cardImage(card)} alt={`${zhTitle(card)} ${card.name.en}`} loading="lazy" className="h-full w-full object-cover" />
                   </div>
                   <div className="leading-tight">
-                    <div className="text-sm text-zinc-100 transition-colors group-hover:text-amber-200">{card.name.zh}</div>
+                    <div className="text-sm text-zinc-100 transition-colors group-hover:text-amber-200">{zhTitle(card)}</div>
                     <div className="text-[10px] text-zinc-500">{card.name.en}</div>
                   </div>
                 </Link>

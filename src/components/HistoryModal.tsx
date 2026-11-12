@@ -125,7 +125,7 @@ export default function HistoryModal({ isOpen, onClose, isLoading, logs, locale 
                           <div className="grid grid-cols-3 gap-2 mt-2">
                             {log.spread_data!.map((card, idx) => {
                               const reversed = card.is_reversed !== undefined ? card.is_reversed : card.isReversed;
-                              const displayName = locale === "en" ? getCardDisplayName(card.name, "en") : card.name;
+                              const displayName = getCardDisplayName(card.name, locale);
                               return (
                                 <div 
                                   key={idx} 
@@ -151,7 +151,7 @@ export default function HistoryModal({ isOpen, onClose, isLoading, logs, locale 
                         ) : (
                           /* 单牌阵渲染 */
                           <div className="text-lg font-bold text-violet-300 drop-shadow-md">
-                            {locale === "en" && log.card_name ? getCardDisplayName(log.card_name, "en") : (log.card_name || "未知卡牌")} 
+                            {log.card_name ? getCardDisplayName(log.card_name, locale) : "未知卡牌"} 
                             <span className="text-xs ml-2 font-normal text-zinc-400 border border-white/10 px-2 py-0.5 rounded-full bg-black/30">
                               {log.is_reversed ? (locale === "zh" ? "逆位" : "Reversed") : (locale === "zh" ? "正位" : "Upright")}
                             </span>

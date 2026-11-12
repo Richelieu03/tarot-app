@@ -11,6 +11,7 @@ import { useEffect, useId, useState, type PointerEvent, type ReactNode } from "r
 import { AnimatePresence, motion, useMotionTemplate, useMotionValue, useReducedMotion, useSpring, useTransform } from "framer-motion";
 import type { Locale } from "../lib/locale";
 import { getCardOneLiner, type TarotCard } from "../lib/tarot-meanings";
+import { getCardDisplayName } from "../lib/tarot-labels";
 import { getCardFacts, getGroupTheme } from "../lib/card-info";
 import { cardImage } from "../lib/card-groups";
 // Type only: the detail text itself is loaded on demand (see the effect below)
@@ -72,7 +73,8 @@ export default function CardDetail({ card, locale, drawnReversed, positionLabel,
   // Cards without detail text yet fall back to the full pre-written meaning
   const short = getCardOneLiner(card, reversed, locale);
   const meaning = detail ? (reversed ? detail.revLong : detail.upLong)[locale] : (reversed ? card.rev : card.up)[locale];
-  const name = card.name[locale];
+  const zhName = getCardDisplayName(card.name.zh, "zh");
+  const name = zh ? zhName : card.name.en;
   const orientations = [
     { rev: false, label: zh ? "正位" : "Upright" },
     { rev: true, label: zh ? "逆位" : "Reversed" },
@@ -122,7 +124,7 @@ export default function CardDetail({ card, locale, drawnReversed, positionLabel,
       >
         {positionLabel && <div className="mb-3 text-xs tracking-[0.3em] text-violet-400">{positionLabel}</div>}
         <h2 className={`font-light text-zinc-50 ${zh ? "text-3xl tracking-[0.25em]" : "text-3xl tracking-[0.06em]"}`}>{name}</h2>
-        <p className="mt-1 text-xs text-zinc-500">{zh ? card.name.en : card.name.zh}</p>
+        <p className="mt-1 text-xs text-zinc-500">{zh ? card.name.en : zhName}</p>
 
         {/* Upright / reversed toggle — the active pill slides between the two */}
         <div onClick={(e) => e.stopPropagation()} className="mt-6 inline-flex rounded-full border border-white/10 bg-white/[0.03] p-1">

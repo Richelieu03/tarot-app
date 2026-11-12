@@ -45,7 +45,7 @@ const MAJOR_ASTRO: { astro: Text; element?: Text }[] = [
 const COURT: Record<string, Text> = {
   page: { zh: "侍从", en: "Page" },
   knight: { zh: "骑士", en: "Knight" },
-  queen: { zh: "圣母", en: "Queen" },
+  queen: { zh: "皇后", en: "Queen" },
   king: { zh: "国王", en: "King" },
 };
 

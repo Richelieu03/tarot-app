@@ -4,6 +4,8 @@ import type { Locale } from "../../../lib/locale";
 import { getCardDisplayName } from "../../../lib/tarot-labels";
 import { TAROT_DECK } from "../../../lib/tarot-deck";
 import { profileToPrompt, sanitizeProfile } from "../../../lib/profile";
+import { computeDailyScores, dayKeyFromOffset, scoresToPrompt } from "../../../lib/daily-scores";
+import { CARD_BY_ZH } from "../../../lib/tarot-meanings";
 // Daily quota per spread type. The client also limits this, but only this server check protects the API key.
 import { DAILY_LIMITS, DAILY_LIMIT_MARKER, SPREAD_COOLDOWN_MS, cooldownMessage, type SpreadType } from "../../../lib/daily-limit";
 
@@ -74,7 +76,7 @@ function isValidCard(name: unknown): name is string {
 // 2. 🌟 低耦合纯函数：解耦卡牌名称转换与正逆位逻辑
 function formatCard(rawName: unknown, isReversed: unknown, locale: Locale): string {
   const zhName = typeof rawName === "string" && rawName ? rawName.trim() : "愚者";
-  const displayName = locale === "en" ? getCardDisplayName(zhName, "en") : zhName;
+  const displayName = getCardDisplayName(zhName, locale);
   const status = locale === "zh" ? (isReversed ? "逆位" : "正位") : (isReversed ? "Reversed" : "Upright");
   return locale === "zh" ? `【${displayName} - ${status}】` : `**${displayName}** (${status})`;
 }
@@ -283,9 +285,20 @@ Part 3: on a new line, "Avoid:" followed by 2–3 things to avoid today, comma-s
       : "[Language] Respond in English only.";
 
     // The user's saved profile (zodiac / MBTI / focus / situation), read from their verified account
-    const profileContext = profileToPrompt(sanitizeProfile(user.user_metadata?.profile), locale);
+    const profile = sanitizeProfile(user.user_metadata?.profile);
+    const profileContext = profileToPrompt(profile, locale);
 
-    const systemPrompt = `${rolePrompt}\n\n${cardsContext}\n\n${questionContext}${profileContext ? `\n\n${profileContext}` : ""}\n\n${taskInstruction}\n\n${languageRule}\n注：除了直接输出解牌内容外，别的内容（如客套话）一概不要回答。`;
+    // 每日一牌: the same six-axis scores the page draws (deterministic), so 宜/忌 can echo them
+    let scoreContext = "";
+    if (spreadType === "daily" && typeof body.cardName === "string" && CARD_BY_ZH[body.cardName]) {
+      const tz = typeof body.tzOffset === "number" && Number.isFinite(body.tzOffset) ? body.tzOffset : 0;
+      const scores = computeDailyScores(CARD_BY_ZH[body.cardName], !!body.isReversed, {
+        profile, seed: user.id, dayKey: dayKeyFromOffset(tz), locale,
+      });
+      if (scores) scoreContext = `\n\n${scoresToPrompt(scores, locale, profile)}`;
+    }
+
+    const systemPrompt = `${rolePrompt}\n\n${cardsContext}\n\n${questionContext}${profileContext ? `\n\n${profileContext}` : ""}${scoreContext}\n\n${taskInstruction}\n\n${languageRule}\n注：除了直接输出解牌内容外，别的内容（如客套话）一概不要回答。`;
 
     // 6. 发起 AI 调用与流式返回
     const genAI = new GoogleGenerativeAI(apiKey);
