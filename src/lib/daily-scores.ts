@@ -17,7 +17,7 @@ export type Scores = Record<Dimension, number>;
 
 const LABELS: Record<Dimension, { zh: string; en: string }> = {
   money: { zh: "金钱", en: "Money" },
-  love: { zh: "感情", en: "Love" },
+  love: { zh: "情感", en: "Love" },
   career: { zh: "事业", en: "Career" },
   luck: { zh: "奇遇", en: "Serendipity" },
   state: { zh: "状态", en: "Energy" },
@@ -162,8 +162,10 @@ export interface DailyScoreResult {
   scores: Scores;
   /** Short explanations of the personal adjustments, for display under the chart */
   notes: string[];
-  /** Dimensions the user said they care about (highlighted on the chart) */
+  /** Dimensions the user said they care about */
   focus: Dimension[];
+  /** Today's highest-scoring dimension(s), highlighted in gold; ties all count */
+  best: Dimension[];
 }
 
 const FOCUS_TO_DIM: Record<string, Dimension> = { study: "career", career: "career", love: "love", health: "state", social: "social" };
@@ -223,7 +225,9 @@ export function computeDailyScores(
   }
 
   const focus = Array.from(new Set((opts.profile?.focus ?? []).map((f) => FOCUS_TO_DIM[f]).filter(Boolean)));
-  return { scores, notes, focus };
+  const top = Math.max(...DIMENSIONS.map((d) => scores[d]));
+  const best = DIMENSIONS.filter((d) => scores[d] === top);
+  return { scores, notes, focus, best };
 }
 
 /** Axis label; students (focus on 学业 but not 事业) see 学业 instead of 事业 */

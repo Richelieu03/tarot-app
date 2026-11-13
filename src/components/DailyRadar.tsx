@@ -14,8 +14,6 @@ interface DailyRadarProps {
   profile?: TarotProfile;
   /** Shown for guests / users without a profile: personal bonuses need zodiac etc. */
   showProfileHint?: boolean;
-  /** Draw the shape now (false keeps it collapsed at the centre until revealed) */
-  active?: boolean;
   className?: string;
 }
 
@@ -31,7 +29,7 @@ function pt(i: number, value: number): [number, number] {
 }
 const toPoints = (vals: number[]) => vals.map((v, i) => pt(i, v).map((n) => n.toFixed(1)).join(",")).join(" ");
 
-export default function DailyRadar({ result, locale, profile, showProfileHint, active = true, className = "" }: DailyRadarProps) {
+export default function DailyRadar({ result, locale, profile, showProfileHint, className = "" }: DailyRadarProps) {
   const reduce = useReducedMotion();
   const zh = locale === "zh";
   const values = DIMENSIONS.map((d) => result.scores[d]);
@@ -65,7 +63,7 @@ export default function DailyRadar({ result, locale, profile, showProfileHint, a
         {/* Score shape */}
         <motion.polygon
           initial={{ points: toPoints(reduce ? values : zero) }}
-          animate={{ points: toPoints(active ? values : zero) }}
+          animate={{ points: toPoints(values) }}
           transition={{ type: "spring", stiffness: 70, damping: 14, delay: 0.15 }}
           fill="url(#radar-fill)" stroke="rgba(253,230,138,0.85)" strokeWidth={1.5} strokeLinejoin="round"
         />
@@ -73,14 +71,14 @@ export default function DailyRadar({ result, locale, profile, showProfileHint, a
           const [x, y] = pt(i, v);
           return (
             <motion.circle key={i} cx={x} cy={y} r={3} fill="#fde68a"
-              initial={{ opacity: 0 }} animate={{ opacity: active ? 1 : 0 }} transition={{ delay: reduce || !active ? 0 : 0.6 + i * 0.05 }} />
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: reduce ? 0 : 0.6 + i * 0.05 }} />
           );
         })}
 
         {/* Labels + scores */}
         {DIMENSIONS.map((d, i) => {
           const [x, y] = pt(i, 12.6);
-          const focused = result.focus.includes(d);
+          const focused = result.best.includes(d); // gold = today's best
           return (
             <g key={d}>
               <text x={x} y={y - 2} textAnchor="middle" fontSize={12}

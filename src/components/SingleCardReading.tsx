@@ -65,6 +65,9 @@ export default function SingleCardReading({ mode }: { mode: SingleCardMode }) {
   const [showAuthOverlay, setShowAuthOverlay] = useState(false);
   // Tapping the revealed card opens a full-screen view of it
   const [focusOpen, setFocusOpen] = useState(false);
+  // The radar waits for the flip to finish: appearing mid-flip moves the card (desktop layout),
+  // and the card's layout animation then overrides its rotateY flip
+  const [flipSettled, setFlipSettled] = useState(true);
 
   const { user, session, appLoaded, todayCloudLog, handleLogout } = useAuth(locale, setLocale, spreadType);
   // Question mode: successful readings today (server enforces DAILY_LIMITS.single)
@@ -215,6 +218,8 @@ export default function SingleCardReading({ mode }: { mode: SingleCardMode }) {
     track("reveal_card", { mode: spreadType, loggedIn: !!user, locale });
     setFocusOpen(false);
 
+    setFlipSettled(false);
+    setTimeout(() => setFlipSettled(true), 900); // TarotCard flip lasts 0.8s
     setFlipped(true);
     
     // 🌟 3. 使用专属缓存键名
@@ -342,7 +347,7 @@ export default function SingleCardReading({ mode }: { mode: SingleCardMode }) {
 
   // Six-axis radar for 每日一牌 (guests get the card's base scores; a saved profile adds personal bonuses)
   const profile = user ? sanitizeProfile(user.user_metadata?.profile) : undefined;
-  const radarCard = isDaily && flipped ? CARD_BY_ZH[currentCard] : undefined;
+  const radarCard = isDaily && flipped && flipSettled ? CARD_BY_ZH[currentCard] : undefined;
   const radar = radarCard
     ? computeDailyScores(radarCard, isReversed, {
         profile,
@@ -418,13 +423,12 @@ export default function SingleCardReading({ mode }: { mode: SingleCardMode }) {
                 <AnimatePresence mode="wait">
                 {!isSelecting && (
                   <DailyStage
-                    radar={radar ? (active) => (
+                    radar={radar ? (
                       <DailyRadar
                         result={radar}
                         locale={locale}
                         profile={profile}
                         showProfileHint={!profile || !hasProfile(profile)}
-                        active={active}
                       />
                     ) : null}
                     card={
@@ -528,7 +532,7 @@ export default function SingleCardReading({ mode }: { mode: SingleCardMode }) {
                               ? {
                                   labels: DIMENSIONS.map((d) => dimensionLabel(d, cl, profile)),
                                   values: DIMENSIONS.map((d) => radar.scores[d]),
-                                  focus: DIMENSIONS.map((d) => radar.focus.includes(d)),
+                                  focus: DIMENSIONS.map((d) => radar.best.includes(d)),
                                 }
                               : undefined,
                           };

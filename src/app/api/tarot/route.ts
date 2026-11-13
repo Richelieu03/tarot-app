@@ -250,13 +250,31 @@ Output the final reading text directly:`
         // 每日一牌: today's fortune, no question
         ? (locale === "zh"
           ? `这是求问者今天的每日一牌。请严格按以下格式输出，不要输出任何其他内容：
-第一部分：一段约 100 字的今日运势，结合该牌在此正逆位状态下的含义，写出今天的整体能量和需要留意的地方。用神秘而温暖的语气，直接从牌面意象切入，禁止任何问候语或称呼（如"亲爱的""你好""旅人"）。
-第二部分：另起一行，以"宜："开头，写 2 到 3 件今天适合做的具体小事，用顿号分隔，每件不超过 8 个字。
-第三部分：另起一行，以"忌："开头，写 2 到 3 件今天不宜做的事，用顿号分隔，每件不超过 8 个字。`
+第一部分：一段约 100 字的今日运势，结合该牌在此正逆位状态下的含义。要求：
+- 用大白话写，少用比喻和抽象的词（如「能量场」「链接」「频率」「迟钝」），每句话都要让人一读就懂、能用上。
+- 先用一句话说清这张牌今天的核心意思；再明确指出今天最可能在哪一两个方面（学业或工作、感情、人际、钱、身体状态）遇到什么样的具体情况；最后给一个今天就能做的具体建议。
+- 可以保留一点神秘、温暖的语气，但不要故弄玄虚，也不要吓唬人。
+- 直接切入，禁止任何问候语或称呼（如"亲爱的""你好""旅人"）。
+第二部分：另起一行，以"宜："开头，写 2 到 3 件今天适合做的事，用顿号分隔，每件不超过 8 个字。
+第三部分：另起一行，以"忌："开头，写 2 到 3 件今天不宜做的事，用顿号分隔，每件不超过 8 个字。
+宜忌的写法（重要）：
+- 像一本神秘的黄历：措辞简洁、带一点古意和仪式感，但每一条都必须是现实中能做的、具体的日常小事，例如「整理旧物」「夜读三页」「写信给远方」「早些熄灯」「向东而行」。
+- 宜和忌都必须是中性的事：平常日子里做了完全没问题，只是今天格外合适或不合适。「忌」可以写「大额下单」「临时改约」「深夜回消息」「赴陌生之约」，绝不能写本来就不该做的事。
+- 禁止使用自带评价的词：盲目、轻信、冲动、过度、逃避、犹豫、消极、急躁、忽略等；也不要写「保持平静」「整理思绪」这类空泛的心态。
+- 每一条都要能从这张牌的意象或今天的状态里找到理由，不要套用万能条目，也不要照抄上面的例子。`
           : `This is the querent's daily card. Output exactly this format and nothing else:
-Part 1: one paragraph (about 70 words) on today's energy and what to watch out for, honoring the upright/reversed orientation. Mystical yet warm. Start directly from the card's imagery — no greetings or forms of address ("Dear", "Hello", "traveler").
-Part 2: on a new line, "Do:" followed by 2–3 small concrete things to do today, comma-separated, each under 6 words.
-Part 3: on a new line, "Avoid:" followed by 2–3 things to avoid today, comma-separated, each under 6 words.`)
+Part 1: one paragraph (about 70 words) on today, honoring the upright/reversed orientation:
+- Write plainly. Few metaphors and no vague jargon ("energy field", "vibration", "alignment"); every sentence should be instantly clear and usable.
+- Open with one sentence on what the card means today; then say concretely which one or two areas (study or work, love, friends, money, physical energy) are most likely to see what kind of situation; end with one concrete thing to do today.
+- A little mystery and warmth is fine, but no mystification and no fear-mongering.
+- Start directly — no greetings or forms of address ("Dear", "Hello", "traveler").
+Part 2: on a new line, "Do:" followed by 2–3 things that suit today, comma-separated, each under 6 words.
+Part 3: on a new line, "Avoid:" followed by 2–3 things that don't suit today, comma-separated, each under 6 words.
+How to write Do / Avoid (important):
+- Like an old almanac: brief, a little archaic and ritual in tone, yet every item must be a real, concrete everyday act, e.g. "Tidy an old drawer", "Read by lamplight", "Write to someone far away", "Walk east at dusk".
+- Every item must be neutral: perfectly fine on an ordinary day, just especially right or wrong for today. Avoid items like "Big online orders", "Last-minute plan changes", "Answering messages past midnight" — never things that are always bad.
+- Never use judgemental words (blind, reckless, impulsive, excessive, escaping, hesitating, negative) or vague states of mind ("stay calm", "clear your head").
+- Each item should trace back to this card's imagery or today's energy. No stock items, and don't copy the examples above.`)
         : (locale === "zh"
           ? `请仔细考虑该牌在此正逆位状态下的深层含义。用神秘、简洁的语气，撰写一段大约 150 字的运势解读，给出具体的建议。`
           : `Honor the specific upright/reversed orientation. In a secretive, concise tone, write about 100 words of guidance and give one concrete suggestion.`);

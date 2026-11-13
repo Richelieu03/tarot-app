@@ -17,6 +17,7 @@ export interface ShareCardInput {
   /** Daily check-in streak, shown in the header ("连续第 5 日") */
   streak?: number;
   /** 每日一牌 six-axis scores; when present (single card) the card moves left and the radar sits on the right */
+  /** `focus`: axes drawn in gold (today's best) */
   radar?: { labels: string[]; values: number[]; focus: boolean[] };
 }
 
