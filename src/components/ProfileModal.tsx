@@ -57,10 +57,22 @@ function ProfileForm({ user, locale, onClose }: { user: User; locale: Locale; on
     setSaving(true);
     setMessage(null);
     const clean = sanitizeProfile(profile);
-    const { error } = await supabase.auth.updateUser({ data: { profile: clean } });
-    setSaving(false);
-    if (error) {
-      setMessage(zh ? `保存失败：${error.message}` : `Couldn't save: ${error.message}`);
+    let failed = false;
+    try {
+      const { error } = await supabase.auth.updateUser({ data: { profile: clean } });
+      if (error) {
+        console.warn("profile save failed:", error.message);
+        failed = true;
+      }
+    } catch (err) {
+      // Network errors (e.g. "Failed to fetch") can throw instead of returning { error }
+      console.warn("profile save failed:", err);
+      failed = true;
+    } finally {
+      setSaving(false);
+    }
+    if (failed) {
+      setMessage(zh ? "保存失败，请重试" : "Couldn't save, please try again");
       return;
     }
     track("profile_saved", {

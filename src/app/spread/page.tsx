@@ -233,7 +233,15 @@ export default function ThreeCardSpread() {
   const handleSetLocale = async (newLocale: Locale) => {
     track("language_switch", { to: newLocale });
     setLocale(newLocale);
-    if (user) await supabase.auth.updateUser({ data: { locale: newLocale } });
+    if (!user) return;
+    // Syncing the locale to user metadata is best-effort: the local switch already
+    // happened, so a network failure (e.g. "Failed to fetch") is ignored.
+    try {
+      const { error } = await supabase.auth.updateUser({ data: { locale: newLocale } });
+      if (error) console.warn("locale sync failed:", error.message);
+    } catch (err) {
+      console.warn("locale sync failed:", err);
+    }
   };
 
   const enterSpread = () => {
