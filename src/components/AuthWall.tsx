@@ -106,6 +106,7 @@ export default function AuthWall({
     } else {
       setCode("");
       setCodeSent(false);
+      onClose();
     }
   };
 
@@ -180,6 +181,7 @@ export default function AuthWall({
         setNotice({ kind: "error", text: `${locale === "zh" ? "登录失败：" : "Login failed: "}${authErrorText(error.message, locale)}` });
       } else {
         setPassword("");
+        onClose();
       }
     }
   };

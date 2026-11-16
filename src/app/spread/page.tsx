@@ -24,6 +24,7 @@ import LocaleSwitcher from "../../components/LocaleSwitcher";
 import TarotFan from "../../components/TarotFan"; 
 import ReadingBox from "../../components/ReadingBox";
 import CardFocusOverlay from "../../components/CardFocusOverlay";
+import { useEncounterNumber, encounterLabel } from "../../hooks/useEncounterNumber";
 import SpreadSelector from "../../components/SpreadSelector"; 
 import CooldownRing from "../../components/CooldownRing";
 import { track } from "../../lib/analytics";
@@ -51,12 +52,6 @@ export default function ThreeCardSpread() {
   // Saved choice, else browser language
   const [locale, setLocale] = useState<Locale>(getInitialLocale);
 
-    useEffect(() => {
-      document.documentElement.lang = locale === "zh" ? "zh-CN" : "en";
-      if (typeof window !== "undefined") {
-        localStorage.setItem(LOCALE_STORAGE_KEY, locale);
-      }
-  }, [locale]);
   const [appStage, setAppStage] = useState<AppStage>("asking");
   const [userQuestion, setUserQuestion] = useState("");
   const [isSelecting, setIsSelecting] = useState(true);
@@ -81,6 +76,9 @@ export default function ThreeCardSpread() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const { user, session, appLoaded, handleLogout } = useAuth(locale, setLocale);
+  // Card shown in the full-screen view (null = closed) and how many times the user has met it
+  const focusCard = focusIdx !== null ? slots[focusIdx]?.cardName ?? null : null;
+  const encounterNo = useEncounterNumber(user, focusCard, "trinity");
   const { saveLog } = useDrawLogger(user);
 
   const slotsRef = useRef(slots);
@@ -227,12 +225,13 @@ export default function ThreeCardSpread() {
 
   useEffect(() => {
     document.documentElement.lang = locale === "zh" ? "zh-CN" : "en";
-    if (typeof window !== "undefined") localStorage.setItem(LOCALE_STORAGE_KEY, locale);
   }, [locale]);
 
   const handleSetLocale = async (newLocale: Locale) => {
     track("language_switch", { to: newLocale });
     setLocale(newLocale);
+    // Only an explicit switch is saved, so it outranks the account's stored locale on login
+    try { localStorage.setItem(LOCALE_STORAGE_KEY, newLocale); } catch { /* storage unavailable */ }
     if (!user) return;
     // Syncing the locale to user metadata is best-effort: the local switch already
     // happened, so a network failure (e.g. "Failed to fetch") is ignored.
@@ -585,9 +584,10 @@ export default function ThreeCardSpread() {
       />
 
       <CardFocusOverlay
-        cardName={focusIdx !== null ? slots[focusIdx]?.cardName ?? null : null}
+        cardName={focusCard}
         isReversed={focusIdx !== null ? !!slots[focusIdx]?.isReversed : false}
         positionLabel={focusIdx !== null ? t(locale, slots[focusIdx].labelKey as UiKey) : undefined}
+        footer={encounterNo ? encounterLabel(encounterNo, locale === "zh") : undefined}
         locale={locale}
         onClose={() => setFocusIdx(null)}
       />

@@ -18,6 +18,7 @@ import { useAuth } from "../hooks/useAuth";
 
 import AuthWall from "./AuthWall";
 import CardFocusOverlay from "./CardFocusOverlay";
+import { useEncounterNumber, encounterLabel } from "../hooks/useEncounterNumber";
 import DailyRadar from "./DailyRadar";
 import DailyStage from "./DailyStage";
 import { DIMENSIONS, computeDailyScores, dayKeyFromOffset, dimensionLabel } from "../lib/daily-scores";
@@ -70,17 +71,21 @@ export default function SingleCardReading({ mode }: { mode: SingleCardMode }) {
   const [flipSettled, setFlipSettled] = useState(true);
 
   const { user, session, appLoaded, todayCloudLog, handleLogout } = useAuth(locale, setLocale, spreadType);
+  // Card shown in the full-screen view (null = closed) and how many times the user has met it
+  const focusCard = focusOpen && flipped ? currentCard : null;
+  const encounterNo = useEncounterNumber(user, focusCard, spreadType);
   // Question mode: successful readings today (server enforces DAILY_LIMITS.single)
   const [usedToday, setUsedToday] = useState(0);
 
   useEffect(() => {
     document.documentElement.lang = locale === "zh" ? "zh-CN" : "en";
-    if (typeof window !== "undefined") localStorage.setItem(LOCALE_STORAGE_KEY, locale);
   }, [locale]);
 
   const handleSetLocale = async (newLocale: Locale) => {
     track("language_switch", { to: newLocale });
     setLocale(newLocale);
+    // Only an explicit switch is saved, so it outranks the account's stored locale on login
+    try { localStorage.setItem(LOCALE_STORAGE_KEY, newLocale); } catch { /* storage unavailable */ }
     if (!user) return;
     // Syncing the locale to user metadata is best-effort: the local switch already
     // happened, so a network failure (e.g. "Failed to fetch") is ignored.
@@ -604,9 +609,10 @@ export default function SingleCardReading({ mode }: { mode: SingleCardMode }) {
       />
 
       <CardFocusOverlay
-        cardName={focusOpen && flipped ? currentCard : null}
+        cardName={focusCard}
         isReversed={isReversed}
         locale={locale}
+        footer={encounterNo ? encounterLabel(encounterNo, locale === "zh") : undefined}
         onClose={() => setFocusOpen(false)}
       />
 

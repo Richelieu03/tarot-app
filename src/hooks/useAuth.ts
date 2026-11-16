@@ -4,7 +4,7 @@
 import { useEffect, useState } from "react";
 import type { User, Session, AuthChangeEvent } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
-import type { Locale } from "../lib/locale";
+import { LOCALE_STORAGE_KEY, isLocale, type Locale } from "../lib/locale";
 
 /** `restoreType`: which DrawLog.spread_type to restore as todayCloudLog ("daily" | "single") */
 export function useAuth(locale: Locale, setLocale: (l: Locale) => void, restoreType: string = "daily") {
@@ -42,6 +42,21 @@ export function useAuth(locale: Locale, setLocale: (l: Locale) => void, restoreT
     }
   };
 
+  // The account's stored locale only fills in when this browser has no saved choice of its own.
+  // Previously it was applied on every auth event (incl. hourly TOKEN_REFRESHED), so a stale
+  // "en" in user_metadata kept flipping the page back to English.
+  const applyAccountLocale = (u: User) => {
+    const accountLocale = u.user_metadata?.locale;
+    if (!isLocale(accountLocale ?? null)) return;
+    try {
+      if (isLocale(localStorage.getItem(LOCALE_STORAGE_KEY))) return;
+      localStorage.setItem(LOCALE_STORAGE_KEY, accountLocale);
+    } catch {
+      // storage unavailable — still use the account locale for this page
+    }
+    setLocale(accountLocale);
+  };
+
   useEffect(() => {
     // initial check for existing session and user
     supabase.auth.getSession().then(async ({ data: { session }, error }) => {
@@ -57,9 +72,7 @@ export function useAuth(locale: Locale, setLocale: (l: Locale) => void, restoreT
       setSession(session);
       
       if (currentUser) {
-        if (currentUser.user_metadata?.locale) {
-          setLocale(currentUser.user_metadata.locale as Locale);
-        }
+        applyAccountLocale(currentUser);
         const log = await checkCloudDrawStatus(currentUser.id);
         if (log) setTodayCloudLog(log);
       }
@@ -75,9 +88,7 @@ export function useAuth(locale: Locale, setLocale: (l: Locale) => void, restoreT
       setSession(session);
 
       if (currentUser) {
-        if (currentUser.user_metadata?.locale) {
-          setLocale(currentUser.user_metadata.locale as Locale);
-        }
+        if (event === "SIGNED_IN") applyAccountLocale(currentUser);
         if (event === "SIGNED_IN" || event === "INITIAL_SESSION") {
           // Defer the DB query until after the auth callback has returned
           setTimeout(async () => {
@@ -103,8 +114,11 @@ export function useAuth(locale: Locale, setLocale: (l: Locale) => void, restoreT
     setSession(null);
     setTodayCloudLog(null);
     
-    // clear localStorage to remove any cached data related to the user
+    // clear localStorage to remove any cached data related to the user,
+    // but keep the language choice so the site doesn't flip languages after logout
+    const savedLocale = localStorage.getItem(LOCALE_STORAGE_KEY);
     localStorage.clear();
+    if (savedLocale) localStorage.setItem(LOCALE_STORAGE_KEY, savedLocale);
     
   };
 

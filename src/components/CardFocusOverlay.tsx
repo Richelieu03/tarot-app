@@ -3,7 +3,7 @@
 
 /** Full-screen focus view for one card. The interactive content lives in <CardDetail>. */
 
-import { useEffect, useRef, type TouchEvent } from "react";
+import { useEffect, useRef, type ReactNode, type TouchEvent } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import type { Locale } from "../lib/locale";
@@ -19,10 +19,12 @@ interface CardFocusOverlayProps {
   locale: Locale;
   /** e.g. a Trinity position label; omitted for single-card modes */
   positionLabel?: string;
+  /** Extra line under the card facts, e.g. the encounter count */
+  footer?: ReactNode;
   onClose: () => void;
 }
 
-export default function CardFocusOverlay({ cardName, isReversed, locale, positionLabel, onClose }: CardFocusOverlayProps) {
+export default function CardFocusOverlay({ cardName, isReversed, locale, positionLabel, footer, onClose }: CardFocusOverlayProps) {
   const card = cardName ? CARD_BY_ZH[cardName] : undefined;
   const open = !!card;
 
@@ -81,7 +83,7 @@ export default function CardFocusOverlay({ cardName, isReversed, locale, positio
           className="fixed inset-0 z-[150] flex items-start justify-center overflow-y-auto bg-[#05030a]/90 cursor-zoom-out px-4 py-14 backdrop-blur-sm"
         >
           {/* key: remount (fresh orientation state) when a different card opens */}
-          <CardDetail key={card.id} card={card} locale={locale} drawnReversed={isReversed} positionLabel={positionLabel} />
+          <CardDetail key={card.id} card={card} locale={locale} drawnReversed={isReversed} positionLabel={positionLabel} footer={footer} />
         </motion.div>
       )}
     </AnimatePresence>,
