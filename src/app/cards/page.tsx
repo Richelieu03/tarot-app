@@ -4,6 +4,8 @@ import Link from "next/link";
 import { CARD_GROUPS, cardImage, cardsInGroup } from "../../lib/card-groups";
 import { getCardDisplayName } from "../../lib/tarot-labels";
 import type { TarotCard } from "../../lib/tarot-meanings";
+import Bi from "../../components/Bi";
+import StaticLocaleSwitcher from "../../components/StaticLocaleSwitcher";
 
 /** Display name (queens show "皇后"); card.name.zh stays the internal id */
 const zhTitle = (c: TarotCard) => getCardDisplayName(c.name.zh, "zh");
@@ -18,15 +20,16 @@ export default function CardLibrary() {
     <div className="relative min-h-screen bg-[#05030a] text-zinc-50">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(900px_520px_at_50%_0%,rgba(140,70,255,0.22),transparent_60%)]" />
 
-      <main className="relative z-10 mx-auto w-full max-w-5xl px-4 pb-20 pt-8 sm:px-6">
+      <StaticLocaleSwitcher />
+      <main className="relative z-10 mx-auto w-full max-w-5xl px-4 pb-20 pt-16 sm:px-6">
         <Link href="/" className="text-xs tracking-widest text-zinc-500 transition-colors hover:text-violet-300">
-          ← 神谕之门 The Oracle Gate
+          ← <Bi zh="神谕之门" en="The Oracle Gate" />
         </Link>
 
         <header className="mt-8 text-center">
           <p className="text-xs tracking-[0.4em] text-amber-400/80">✦ CARD LIBRARY ✦</p>
-          <h1 className="mt-3 text-3xl font-light tracking-[0.2em] text-zinc-100 sm:text-4xl">牌义图鉴</h1>
-          <p className="mt-3 text-sm text-zinc-500">78 张韦特塔罗牌的正位与逆位 · The meanings of all 78 cards</p>
+          <h1 className="mt-3 text-3xl font-light tracking-[0.2em] text-zinc-100 sm:text-4xl"><Bi zh="牌义图鉴" en="Card Library" /></h1>
+          <p className="mt-3 text-sm text-zinc-500"><Bi zh="78 张韦特塔罗牌的正位与逆位" en="The meanings of all 78 cards" /></p>
         </header>
 
         {/* jump links */}
@@ -37,7 +40,7 @@ export default function CardLibrary() {
               href={`#${g.key}`}
               className="shrink-0 rounded-full border border-white/10 px-4 py-1.5 text-xs text-zinc-300 transition-colors hover:border-violet-400/50 hover:text-violet-200"
             >
-              {g.zh}
+              <Bi zh={g.zh} en={g.en} />
             </a>
           ))}
         </nav>
@@ -46,9 +49,9 @@ export default function CardLibrary() {
           <section key={g.key} id={g.key} className="scroll-mt-20 pt-12">
             <div className="mb-6 border-b border-white/10 pb-3">
               <h2 className="text-xl font-light tracking-[0.15em] text-zinc-100">
-                {g.zh} <span className="ml-2 text-sm tracking-normal text-zinc-500">{g.en}</span>
+                <Bi zh={g.zh} en={g.en} />
               </h2>
-              <p className="mt-1 text-xs text-amber-400/70">{g.themeZh} · {g.themeEn}</p>
+              <p className="mt-1 text-xs text-amber-400/70"><Bi zh={g.themeZh} en={g.themeEn} /></p>
             </div>
 
             <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 sm:gap-5 md:grid-cols-6">
@@ -59,8 +62,8 @@ export default function CardLibrary() {
                     <img src={cardImage(card)} alt={`${zhTitle(card)} ${card.name.en}`} loading="lazy" className="h-full w-full object-cover" />
                   </div>
                   <div className="leading-tight">
-                    <div className="text-sm text-zinc-100 transition-colors group-hover:text-amber-200">{zhTitle(card)}</div>
-                    <div className="text-[10px] text-zinc-500">{card.name.en}</div>
+                    <div className="text-sm text-zinc-100 transition-colors group-hover:text-amber-200"><Bi zh={zhTitle(card)} en={card.name.en} /></div>
+                    <div className="lang-zh text-[10px] text-zinc-500">{card.name.en}</div>
                   </div>
                 </Link>
               ))}

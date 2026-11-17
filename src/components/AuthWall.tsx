@@ -8,7 +8,6 @@ import type { Locale } from "../lib/locale";
 
 interface AuthWallProps {
   locale: Locale;
-  setLocale: (locale: Locale) => void;
   isOpen: boolean;       
   onClose: () => void;   
   subtitle?: string;     
@@ -38,7 +37,6 @@ function authErrorText(message: string, locale: Locale): string {
 
 export default function AuthWall({ 
   locale, 
-  setLocale, 
   isOpen, 
   onClose,
   subtitle,

@@ -79,6 +79,7 @@ export default function SingleCardReading({ mode }: { mode: SingleCardMode }) {
 
   useEffect(() => {
     document.documentElement.lang = locale === "zh" ? "zh-CN" : "en";
+    document.documentElement.dataset.lang = locale;
   }, [locale]);
 
   const handleSetLocale = async (newLocale: Locale) => {
@@ -643,7 +644,6 @@ export default function SingleCardReading({ mode }: { mode: SingleCardMode }) {
               
               <AuthWall 
                 locale={locale} 
-                setLocale={setLocale} 
                 isOpen={showAuthOverlay} 
                 onClose={() => setShowAuthOverlay(false)} 
                 redirectTo={authRedirect}

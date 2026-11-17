@@ -225,6 +225,7 @@ export default function ThreeCardSpread() {
 
   useEffect(() => {
     document.documentElement.lang = locale === "zh" ? "zh-CN" : "en";
+    document.documentElement.dataset.lang = locale;
   }, [locale]);
 
   const handleSetLocale = async (newLocale: Locale) => {
@@ -596,7 +597,6 @@ export default function ThreeCardSpread() {
       {!user && (
         <AuthWall
           locale={locale}
-          setLocale={setLocale}
           isOpen={showAuthOverlay}
           onClose={() => setShowAuthOverlay(false)}
           redirectTo={authRedirect}
