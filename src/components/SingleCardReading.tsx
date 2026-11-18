@@ -124,7 +124,8 @@ export default function SingleCardReading({ mode }: { mode: SingleCardMode }) {
       if (result.length > 10 && !result.includes("【魔法阵崩溃】") && !result.includes("[Ritual interrupted]")) {
         track("ai_reading", { mode: spreadType, locale });
       }
-      if (result.length > 10 && !result.includes("Error") && !result.includes("503")) {
+      // A reading that broke off mid-stream ends with the 崩溃 marker — don't cache it as today's reading
+      if (result.length > 10 && !result.includes("Error") && !result.includes("503") && !result.includes("【魔法阵崩溃】") && !result.includes("[Ritual interrupted]")) {
         localStorage.setItem(LS("last_date"), new Date().toDateString());
         localStorage.setItem(LS("last_ai_reading"), result);
         setUsedToday((n) => n + 1);

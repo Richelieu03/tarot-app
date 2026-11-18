@@ -334,13 +334,31 @@ How to write Do / Avoid (important):
     const PRIMARY_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
     const FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL || "gemini-2.5-flash-lite";
     const attempts = [PRIMARY_MODEL, PRIMARY_MODEL, FALLBACK_MODEL];
-    let fullText = "";
+    // Text of one streamed chunk; a chunk blocked by safety filters throws on .text()
+    const chunkText = (chunk: { text: () => string }) => {
+      try { return chunk.text(); } catch { return ""; }
+    };
+
+    // Open a real stream. Retries and the fallback model apply only until the first text
+    // arrives; after that the reading is already on the user's screen.
+    let iterator: AsyncIterator<{ text: () => string }> | null = null;
+    let firstText = "";
     let lastError: unknown;
     for (let i = 0; i < attempts.length; i++) {
       try {
-        const result = await makeModel(attempts[i]).generateContent(systemPrompt);
-        fullText = result.response.text().trim();
-        if (fullText) break;
+        const result = await makeModel(attempts[i]).generateContentStream(systemPrompt);
+        const it = result.stream[Symbol.asyncIterator]();
+        let got = "";
+        while (!got) {
+          const next = await it.next();
+          if (next.done) break;
+          got = chunkText(next.value).trimStart();
+        }
+        if (got) {
+          iterator = it;
+          firstText = got;
+          break;
+        }
       } catch (err) {
         lastError = err;
         if (!isRetryableGeminiError(err)) throw err;
@@ -348,53 +366,85 @@ How to write Do / Avoid (important):
         if (i < attempts.length - 1) await new Promise((r) => setTimeout(r, 1200 * (i + 1)));
       }
     }
-    if (!fullText && lastError) throw lastError;
+    if (!firstText && lastError) throw lastError;
     // An empty answer (e.g. blocked by safety filters) must not be stored, or it would
     // use up the user's daily quota and be "restored" as a blank reading.
-    if (!fullText) {
+    if (!firstText) {
       return textResponse(locale === "zh" ? "【魔法阵崩溃】神谕没有回应，请重试。" : "[Ritual interrupted]\nThe oracle gave no answer. Please try again.");
     }
 
-    // Record the reading server-side: this row is what the daily quota counts,
-    // so it must not depend on the browser finishing the stream.
-    const { error: insertError } = await db.from("DrawLog").insert([
-      spreadType !== "trinity"
-        ? {
-            user_id: user.id,
-            spread_type: spreadType,
-            card_name: body.cardName,
-            is_reversed: !!body.isReversed,
-            question: questionRaw,
-            ai_reading: fullText,
-            spread_data: null,
-          }
-        : {
-            user_id: user.id,
-            spread_type: "trinity",
-            card_name: slots[0].cardName,
-            is_reversed: !!slots[0].isReversed,
-            question: questionRaw,
-            ai_reading: fullText,
-            spread_data: slots.map((s) => ({
-              name: s.cardName,
-              is_reversed: !!s.isReversed,
-              position_label: s.slotLabel ?? "",
-            })),
-          },
-    ]);
-    if (insertError) console.error("DrawLog insert failed:", insertError.message);
+    // Record the reading server-side once it is complete: this row is what the daily quota
+    // counts, so it is written here rather than by the browser.
+    const saveReading = async (fullText: string) => {
+      const { error: insertError } = await db.from("DrawLog").insert([
+        spreadType !== "trinity"
+          ? {
+              user_id: user.id,
+              spread_type: spreadType,
+              card_name: body.cardName,
+              is_reversed: !!body.isReversed,
+              question: questionRaw,
+              ai_reading: fullText,
+              spread_data: null,
+            }
+          : {
+              user_id: user.id,
+              spread_type: "trinity",
+              card_name: slots[0].cardName,
+              is_reversed: !!slots[0].isReversed,
+              question: questionRaw,
+              ai_reading: fullText,
+              spread_data: slots.map((s) => ({
+                name: s.cardName,
+                is_reversed: !!s.isReversed,
+                position_label: s.slotLabel ?? "",
+              })),
+            },
+      ]);
+      if (insertError) console.error("DrawLog insert failed:", insertError.message);
+    };
 
     const stream = new ReadableStream({
       async start(controller) {
-        // Typewriter effect: a few characters per tick instead of 1 char / 30ms
-        // (a 300-char reading used to take ~9s just to "type out")
         const encoder = new TextEncoder();
-        const chars = Array.from(fullText);
-        for (let i = 0; i < chars.length; i += 3) {
-          controller.enqueue(encoder.encode(chars.slice(i, i + 3).join("")));
-          await new Promise((resolve) => setTimeout(resolve, 20));
+        // If the user closes the page, keep reading from Gemini so the reading is still stored
+        let clientGone = false;
+        const send = (text: string) => {
+          if (clientGone) return;
+          try { controller.enqueue(encoder.encode(text)); } catch { clientGone = true; }
+        };
+        // Gemini sends text in bursts; type each burst out quickly so it doesn't jump a sentence at a time
+        const typeOut = async (text: string) => {
+          const chars = Array.from(text);
+          for (let i = 0; i < chars.length && !clientGone; i += 4) {
+            send(chars.slice(i, i + 4).join(""));
+            await new Promise((r) => setTimeout(r, 12));
+          }
+        };
+
+        let fullText = firstText;
+        let failed = false;
+        await typeOut(firstText);
+        try {
+          while (iterator) {
+            const next = await iterator.next();
+            if (next.done) break;
+            const text = chunkText(next.value);
+            if (!text) continue;
+            fullText += text;
+            await typeOut(text);
+          }
+        } catch (err) {
+          // Broke off mid-reading: say so, and don't store it (the quota isn't used up)
+          console.error("Gemini stream broke off:", err);
+          failed = true;
+          send(locale === "zh" ? "\n\n【魔法阵崩溃】神谕中断了，请重试。" : "\n\n[Ritual interrupted]\nThe oracle broke off. Please try again.");
         }
-        controller.close();
+
+        if (!failed) await saveReading(fullText.trim());
+        if (!clientGone) {
+          try { controller.close(); } catch { /* already closed */ }
+        }
       },
     });
 
