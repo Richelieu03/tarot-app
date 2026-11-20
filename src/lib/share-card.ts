@@ -244,7 +244,9 @@ export async function renderShareCard(input: ShareCardInput): Promise<Blob> {
   const isSingle = input.cards.length === 1;
   // Daily card with scores: card on the left, radar on the right, text centred underneath
   const withRadar = isSingle && !!input.radar;
-  const cardW = withRadar ? 320 : isSingle ? 340 : 270;
+  // 单牌问答: question on top, then the card and its text, all centred as one block
+  const qaSingle = isSingle && !withRadar && !input.excerpt && !input.almanac;
+  const cardW = withRadar ? 320 : qaSingle ? 380 : isSingle ? 340 : 270;
   const cardH = Math.round((cardW * 43) / 25);
   const gap = isSingle ? 0 : 42;
   const totalW = cardW * input.cards.length + gap * (input.cards.length - 1);
@@ -260,6 +262,22 @@ export async function renderShareCard(input: ShareCardInput): Promise<Blob> {
     const areaTop = 230;
     const areaBottom = H - 190;
     top = areaTop + Math.max(0, Math.round((areaBottom - areaTop - blockH) / 2));
+  }
+  if (qaSingle) {
+    ctx.font = `400 28px ${SANS}`;
+    const qLines = input.question ? wrapText(ctx, `${zh ? "所问之事：" : "Question: "}${input.question}`, W - 220, 2) : [];
+    ctx.font = `400 30px ${serif}`;
+    const taglineLines = input.cards[0].tagline ? wrapText(ctx, input.cards[0].tagline, W - 240, 2).length : 0;
+    // question lines (28px, 42px apart) + gap above the card
+    const qH = qLines.length ? 28 + (qLines.length - 1) * 42 + 64 : 0;
+    const blockH = qH + cardH + 64 + 46 + (taglineLines ? 50 + (taglineLines - 1) * 42 : 0) + 10;
+    const areaTop = 230;
+    const areaBottom = H - 170;
+    const blockTop = areaTop + Math.max(0, Math.round((areaBottom - areaTop - blockH) / 2));
+    ctx.fillStyle = "rgba(161, 161, 170, 0.95)";
+    ctx.font = `400 28px ${SANS}`;
+    qLines.forEach((line, i) => ctx.fillText(line, W / 2, blockTop + 28 + i * 42));
+    top = blockTop + qH;
   }
 
   let cardsBottom = 0;
@@ -301,7 +319,7 @@ export async function renderShareCard(input: ShareCardInput): Promise<Blob> {
     ctx.fillText("—  ✧  —", W / 2, cardsBottom + 80);
     y = cardsBottom + 80 + 70 - 14;
   }
-  if (input.question) {
+  if (input.question && !qaSingle) {
     ctx.fillStyle = "rgba(161, 161, 170, 0.95)";
     ctx.font = `400 28px ${SANS}`;
     const q = wrapText(ctx, `${zh ? "所问之事：" : "Question: "}${input.question}`, W - 220, 2);

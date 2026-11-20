@@ -24,6 +24,9 @@ interface CardFocusOverlayProps {
   onClose: () => void;
 }
 
+/** popstate events caused by our own history.back() calls, to be ignored */
+let skipPops = 0;
+
 export default function CardFocusOverlay({ cardName, isReversed, locale, positionLabel, footer, onClose }: CardFocusOverlayProps) {
   const card = cardName ? CARD_BY_ZH[cardName] : undefined;
   const open = !!card;
@@ -38,6 +41,30 @@ export default function CardFocusOverlay({ cardName, isReversed, locale, positio
     const id = setTimeout(load, 2000);
     return () => clearTimeout(id);
   }, []);
+
+  // Back button / swipe-back (e.g. WeChat's ‹) closes the card view instead of leaving the page:
+  // opening adds a history entry, and closing any other way removes it again.
+  const onCloseRef = useRef(onClose);
+  useEffect(() => { onCloseRef.current = onClose; });
+  useEffect(() => {
+    if (!open) return;
+    window.history.pushState({ cardFocus: true }, "");
+    const onPop = () => {
+      // Our own history.back() from a previous close — not the user pressing back
+      if (skipPops > 0) return;
+      onCloseRef.current();
+    };
+    window.addEventListener("popstate", onPop);
+    return () => {
+      window.removeEventListener("popstate", onPop);
+      if (window.history.state?.cardFocus) {
+        skipPops++;
+        // Released after every listener has seen that popstate (listener order doesn't matter)
+        window.addEventListener("popstate", () => setTimeout(() => { skipPops--; }, 0), { once: true });
+        window.history.back();
+      }
+    };
+  }, [open]);
 
   // Esc closes; lock page scroll while open
   useEffect(() => {
